@@ -5,7 +5,7 @@ var THRESHOLD=36;
 var swingSortKey='pred', swingSortDir=-1;
 var REG_MODEL=null;
 // 表示用の状態（計算結果には影響しない）
-var UI={statsPeriod:'all',cmpPeriod:'all',cmpMetric:'score',formSort:{key:'score',dir:-1},logLimit:30,logForm:'',SMALL_N:10};
+var UI={statsPeriod:'all',cmpPeriod:'all',cmpMetric:'score',formSort:{key:'score',dir:-1},logLimit:30,logForm:'',SMALL_N:10,recMode:'balance'};
 var CMP_CHART=null, SWING_CHART=null;
 
 /* ============================================================
@@ -333,7 +333,123 @@ function renderGameStatus(){
     '<rect class="base home" x="18" y="33" width="10" height="10" transform="rotate(45 23 38)"/></svg>';
   el.innerHTML='<div class="gstat">'+svg+'<div class="gstat-body"><div class="gstat-t">'+title+' · '+runnerTxt+'</div>'+
     '<div class="gstat-s">'+sub+'</div><div class="pbar'+(after?' over':'')+'"><i style="width:'+Math.min(100,c/THRESHOLD*100)+'%"></i></div></div></div>';
+  renderRecommend();
 }
+
+/* ============================================================
+   次のゲームのおすすめ（表示専用。成績・スコア・重回帰の式には影響しない）
+   1ゲーム=1フォームで運用しているので、ゲーム単位でおすすめする。
+   優先度(100点) = ご無沙汰40 + データ不足30 + 有望度30（モードで重みを変える）
+   ============================================================ */
+var REC_WEIGHTS={
+  balance:{r:40,l:30,p:30},
+  recent:{r:80,l:10,p:10},
+  lack:{r:10,l:80,p:10},
+  promise:{r:10,l:10,p:80}
+};
+function setRecMode(m){UI.recMode=m;renderRecommend();}
+
+function gameList(){
+  // ABSをid順に並べ、paNum===1ごとにゲームを区切る（最初の打席がpaNum!==1でも1ゲームとして扱う）
+  var sorted=ABS.slice().sort(function(a,b){return a.id-b.id;});
+  var games=[],cur=null;
+  sorted.forEach(function(a){if(a.paNum===1||!cur){cur={abs:[],forms:{}};games.push(cur);}cur.abs.push(a);cur.forms[a.form]=(cur.forms[a.form]||0)+1;});
+  games.forEach(function(g){g.form=Object.keys(g.forms).sort(function(x,y){return g.forms[y]-g.forms[x];})[0];g.lastId=g.abs[g.abs.length-1].id;});
+  return games;
+}
+
+function computeRecommendations(){
+  var games=gameList(),G=games.length;
+  var byF=groupByForm(ABS);
+  var afterBy=groupByForm(get36after());
+  var model=computeRegressionModel();
+  var names=Object.keys(byF);
+  FMS.forEach(function(f){if(names.indexOf(f)<0)names.push(f);});
+  names=names.filter(function(f){return f!=='（未設定）';});
+  var items=names.map(function(f){
+    var list=byF[f]||[];
+    var last=-1,ng=0,lastId=0;
+    games.forEach(function(g,i){if(g.forms[f]){last=i;ng++;lastId=g.lastId;}});
+    var s=list.length?calc(list):null;
+    var raw=list.length?calcSwingRaw(list):null;
+    var pred=model&&raw&&raw.n>=3?predictRBI(model,raw.timing,raw.iso,raw.nongoro):null;
+    return{form:f,n:list.length,nAfter:(afterBy[f]||[]).length,games:ng,
+      since:last<0?null:G-1-last,lastId:lastId,score:s?calcScoreAll(s):null,
+      residual:pred!==null?s.rbiRate-pred:null};
+  });
+  var used=items.filter(function(x){return x.n>0;});
+  function mm(arr){var v=arr.filter(function(x){return x!==null&&isFinite(x);});return v.length?{mn:Math.min.apply(null,v),mx:Math.max.apply(null,v)}:{mn:0,mx:0};}
+  function nz(v,r){return r.mx>r.mn?(v-r.mn)/(r.mx-r.mn):0.5;}
+  var rSince=mm(used.map(function(x){return x.since;}));
+  var rInvN=mm(used.map(function(x){return 1/Math.sqrt(x.n);}));
+  var rInvA=mm(used.map(function(x){return 1/Math.sqrt(x.nAfter+1);}));
+  var rScore=mm(used.map(function(x){return x.score;}));
+  var rRes=mm(used.map(function(x){return x.residual===null?null:-x.residual;}));
+  var scoreRank={};used.slice().sort(function(a,b){return b.score-a.score;}).forEach(function(x,i){scoreRank[x.form]=i+1;});
+  var W=REC_WEIGHTS[UI.recMode]||REC_WEIGHTS.balance;
+  items.forEach(function(x){
+    var rec,lack,prom;
+    if(!x.n){rec=1;lack=1;prom=0.5;}
+    else{
+      rec=x.since===null?1:(rSince.mx>0?x.since/rSince.mx:0);
+      lack=(nz(1/Math.sqrt(x.n),rInvN)+nz(1/Math.sqrt(x.nAfter+1),rInvA))/2;
+      var ps=nz(x.score,rScore);
+      prom=x.residual===null?ps:ps*0.7+nz(-x.residual,rRes)*0.3;
+    }
+    x.parts={r:rec*W.r,l:lack*W.l,p:prom*W.p};
+    x.total=x.parts.r+x.parts.l+x.parts.p;
+    x.rank=scoreRank[x.form]||null;
+    // 理由
+    var why=[];
+    if(!x.n)why.push({c:'n',t:'まだ記録なし'});
+    else{
+      var cand=[];
+      cand.push({k:rec*W.r,c:'r',t:x.since===0?'前のゲームで使用':x.since+'試合ぶり'});
+      if(x.nAfter<UI.SMALL_N)cand.push({k:(lack+0.3)*W.l,c:'l',t:'36球以後が'+x.nAfter+'打席だけ'});
+      else cand.push({k:lack*W.l,c:'l',t:'通算'+x.n+'打席・'+x.games+'試合'});
+      if(x.residual!==null&&x.residual<-0.02)cand.push({k:(prom+0.2)*W.p,c:'p',t:'不運気味（乖離'+sgn(x.residual)+'）'});
+      else if(x.rank&&x.rank<=3)cand.push({k:(prom+0.2)*W.p,c:'p',t:'スコア'+x.rank+'位'});
+      else cand.push({k:prom*W.p,c:'p',t:'スコア'+x.score.toFixed(1)});
+      cand.sort(function(a,b){return b.k-a.k;});
+      why=cand.slice(0,2);
+    }
+    x.why=why;
+  });
+  items.sort(function(a,b){return b.total-a.total;});
+  return{items:items,games:games};
+}
+
+function recRowHtml(x,i,canPick){
+  var meta=x.n?'通算'+x.n+'打席 · '+x.games+'試合 · 最終 '+(x.since===0?'前のゲーム':x.since+'試合前')+(x.lastId?'（'+new Date(x.lastId).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric'})+'）':''):'未記録のフォーム';
+  var tot=x.total||1;
+  return '<div class="rec'+(i===0?' first':'')+'">'+
+    '<div class="rec-rank">'+(i+1)+'</div>'+
+    '<div><div class="rec-name">'+esc(x.form)+'</div><div class="rec-meta">'+meta+'</div>'+
+      '<div class="rec-why">'+x.why.map(function(w){return '<span class="why '+w.c+'">'+esc(w.t)+'</span>';}).join('')+'</div></div>'+
+    '<div class="rec-side"><div><div class="rec-pt">'+Math.round(x.total)+'<small>点</small></div>'+
+      '<div class="rec-bars" title="ご無沙汰 '+Math.round(x.parts.r)+' / データ不足 '+Math.round(x.parts.l)+' / 有望 '+Math.round(x.parts.p)+'">'+
+      '<i class="br" style="width:'+(x.parts.r/tot*100)+'%"></i><i class="bl" style="width:'+(x.parts.l/tot*100)+'%"></i><i class="bp" style="width:'+(x.parts.p/tot*100)+'%"></i></div></div>'+
+      (canPick?'<button type="button" class="btn'+(i===0?' btnp':'')+'" data-f="'+esc(x.form)+'" onclick="pickRec(this.dataset.f)">このフォームにする</button>':'')+
+    '</div></div>';
+}
+
+function renderRecommend(){
+  var listEl=$('rec-list');if(!listEl)return;
+  setSeg('rec-mode',UI.recMode);
+  var R=computeRecommendations(),items=R.items,games=R.games;
+  var nextPa=parseInt($('pa-num').value)||1;
+  var midGame=nextPa!==1&&games.length>0;
+  var curForm=midGame?games[games.length-1].form:null;
+  $('rec-sub').innerHTML=midGame?'いま第'+games.length+'試合（'+esc(curForm)+'）の途中です。次のゲームの候補：':'1ゲーム＝1フォーム。次のゲームで使うフォームの候補です。';
+  if(!items.length){listEl.innerHTML='<p class="empty">フォームがまだありません</p>';return;}
+  var top=items.slice(0,3),rest=items.slice(3);
+  listEl.innerHTML='<div class="rec-list">'+top.map(function(x,i){return recRowHtml(x,i,!midGame);}).join('')+'</div>'+
+    (rest.length?'<details class="rec-more"><summary>残り'+rest.length+'フォームの優先度を見る</summary><div class="rec-list" style="margin-top:8px;">'+
+      rest.map(function(x,i){return recRowHtml(x,i+3,!midGame);}).join('')+'</div></details>':'')+
+    '<div class="rec-legend">優先度＝<b style="color:var(--warn)">ご無沙汰</b>（最後に使ってからの試合数）＋<b style="color:var(--info)">データ不足</b>（通算・36球以後の打席が少ない）＋<b style="color:var(--good)">有望</b>（スコアが高い・予測より不運）。配分：'+
+      (function(w){return w.r+' / '+w.l+' / '+w.p;})(REC_WEIGHTS[UI.recMode])+'点。おすすめ用の目安で、成績・スコアの計算には影響しません。</div>';
+}
+function pickRec(f){pickF(f);var el=$('form-name');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});}
 
 function mkB(a){
   var isHR=a.bases===4&&!a.isOut;

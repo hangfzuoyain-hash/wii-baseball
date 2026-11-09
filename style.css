@@ -183,3 +183,36 @@ select:focus,input:focus,textarea:focus{outline:2px solid rgba(var(--accent-rgb)
   .seg-wide button{flex:0 0 auto;}
   .cw-sq{height:300px;}
 }
+
+/* ===== おすすめ ===== */
+.rec-list{display:grid;gap:8px;}
+.rec{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--surface);}
+.rec.first{border-color:var(--accent);background:var(--accent-weak);}
+.rec-rank{font-size:18px;font-weight:800;color:var(--faint);width:1.4em;text-align:center;}
+.rec.first .rec-rank{color:var(--accent);}
+.rec-name{font-size:15px;font-weight:800;}
+.rec-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.rec-why{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+.why{font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;}
+.why.r{background:var(--warn-bg);color:var(--warn);}
+.why.l{background:var(--info-bg);color:var(--info);}
+.why.p{background:var(--good-bg);color:var(--good);}
+.why.n{background:var(--accent-weak);color:var(--accent);}
+.rec-side{text-align:right;}
+.rec-pt{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;}
+.rec-pt small{font-size:10px;color:var(--muted);font-weight:600;}
+.rec-bars{display:flex;height:5px;width:64px;border-radius:99px;overflow:hidden;background:var(--border);margin:5px 0 6px auto;}
+.rec-bars i{display:block;height:100%;}
+.rec-bars .br{background:var(--warn);}.rec-bars .bl{background:var(--info);}.rec-bars .bp{background:var(--good);}
+.rec-more{margin-top:8px;}
+.rec-more summary{cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:700;padding:4px 0;}
+.rec-legend{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.6;}
+.rec-legend b{font-weight:700;}
+@media (max-width:600px){
+  .rec-card .card-h{align-items:flex-start;}
+  .rec-card .seg{width:100%;}
+  .rec-card .seg button{flex:1 1 auto;}
+  .rec{grid-template-columns:auto 1fr;}
+  .rec-side{grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;}
+  .rec-bars{margin:0;}
+}

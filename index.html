@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#11121a" media="(prefers-color-scheme: dark)">
 <title>Wii Sports 打撃フォーム分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚾%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=2"></head><body>
+<link rel="stylesheet" href="style.css?v=3"></head><body>
 
 <header class="hdr">
   <div class="wrap hdr-top">
@@ -26,6 +26,18 @@
 
 <!-- ===== 打席入力 ===== -->
 <section class="section active" id="tab-entry">
+  <div class="card rec-card" id="rec-card">
+    <div class="card-h">
+      <div><div class="card-t">🎯 次のゲームのおすすめ</div><div class="sub" id="rec-sub"></div></div>
+      <div class="seg" id="rec-mode">
+        <button type="button" data-v="balance" onclick="setRecMode('balance')">バランス</button>
+        <button type="button" data-v="recent" onclick="setRecMode('recent')">ご無沙汰</button>
+        <button type="button" data-v="lack" onclick="setRecMode('lack')">データ不足</button>
+        <button type="button" data-v="promise" onclick="setRecMode('promise')">有望</button>
+      </div>
+    </div>
+    <div id="rec-list"></div>
+  </div>
   <div class="card">
     <div id="game-status"></div>
     <div class="row2">
@@ -220,5 +232,5 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body></html>
