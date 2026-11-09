@@ -763,6 +763,7 @@ window.sortSwing=function(key){
 window.WII_DEL=function(id){
   var numId=parseInt(id,10);
   if(!window.confirm('削除しますか？'))return;
+  if(window.SYNC)SYNC.markDeleted(numId); // 他の端末で復活しないよう記録
   ABS=ABS.filter(function(x){return x.id!==numId;});
   ABS=recalcRBI(ABS);
   saveA();refreshAfterChange();
@@ -839,6 +840,7 @@ function switchTab(name){
 function refreshAfterChange(){
   renderHeader();renderRecent();renderChips();renderGameStatus();
   if(CUR_TAB!=='entry')renderTab(CUR_TAB);
+  if(window.SYNC)SYNC.onLocalChange(); // クラウド同期へ通知（sync.js）
 }
 
 /* ============================================================
@@ -852,6 +854,7 @@ function renderDataInfo(){
     '<div class="kpi"><div class="n">'+ABS.length+'</div><div class="d">保存中の打席</div></div>'+
     '<div class="kpi"><div class="n">'+FMS.length+'</div><div class="d">登録フォーム</div></div>'+
     '<div class="kpi"><div class="n" style="font-size:15px;">'+lastTxt+'</div><div class="d">最終記録</div></div></div>';
+  if(window.SYNC)SYNC.render();
 }
 function toast(m){var e=document.getElementById('data-msg');if(e)e.textContent=m;}
 function exportPayload(){return JSON.stringify({version:1,exportedAt:new Date().toISOString(),abs:ABS,forms:FMS},null,1);}

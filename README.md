@@ -6,7 +6,10 @@
 - `style.css` … 見た目
 - `app.js` … 計算・保存の処理（式は CLAUDE.md 参照）
 
-打席データはリポジトリには入っていません。各ブラウザの localStorage（`wii_final` / `wii_final_f`）に保存されます。
+- `sync.js` … GitHub Gist とのクラウド同期
+
+打席データはリポジトリには入っていません。「データ」タブでクラウド同期（GitHub Gist）をオンにすると、PC・スマホで自動的に同じデータになります。
+各ブラウザの localStorage（`wii_final` / `wii_final_f`）に保存されます。
 端末やブラウザを変えるときは「データ」タブでJSONを書き出し → 新しい方で読み込み。
 
 ## コードを更新して公開し直す

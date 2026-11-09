@@ -5,12 +5,12 @@
 <meta name="theme-color" content="#11121a" media="(prefers-color-scheme: dark)">
 <title>Wii Sports 打撃フォーム分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚾%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=3"></head><body>
+<link rel="stylesheet" href="style.css?v=4"></head><body>
 
 <header class="hdr">
   <div class="wrap hdr-top">
     <h1>⚾ Wii Sports 打撃フォーム分析</h1>
-    <div class="hdr-kpi" id="hdr-kpi"></div>
+    <div class="hdr-right"><div class="hdr-kpi" id="hdr-kpi"></div><button type="button" id="sync-badge" class="sync-badge off" onclick="switchTab('data')">☁ 同期オフ</button></div>
   </div>
   <nav class="wrap tabs" role="tablist">
     <button type="button" class="tab active" data-tab="entry" onclick="switchTab('entry')">打席入力</button>
@@ -182,6 +182,10 @@
 <!-- ===== データ ===== -->
 <section class="section" id="tab-data">
   <div class="card">
+    <div class="card-h"><div class="card-t">☁ クラウド同期（GitHub Gist）</div></div>
+    <div id="sync-panel"></div>
+  </div>
+  <div class="card">
     <div class="card-h"><div class="card-t">データの書き出し・読み込み（JSON）</div></div>
     <div id="data-info"></div>
     <p class="sub" style="margin-bottom:10px;">データはこのブラウザのlocalStorageに保存されています。端末やブラウザを変える前に書き出してください。</p>
@@ -232,5 +236,6 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
+<script src="sync.js?v=4"></script>
 </body></html>

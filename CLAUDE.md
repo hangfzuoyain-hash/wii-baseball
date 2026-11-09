@@ -9,6 +9,7 @@
 - タブ: 打席入力 / 成績一覧 / フォーム比較（全体・36球以前・36球以後を切替）/ スイング理論 / データ。URLの `#stats` などで直接開ける。
 - 打席入力タブ上部に「次のゲームのおすすめ」（1ゲーム=1フォーム運用）。優先度=ご無沙汰40+データ不足30+有望30（`REC_WEIGHTS`でモード別）。表示専用で成績計算には影響しない。
 - app.js 前半の「計算部分」は式を変えないこと。表示側の打席数10未満は「参考」扱い（`UI.SMALL_N`、計算には影響しない）。
+- クラウド同期: `sync.js`。GitHubのシークレットGist（ファイル名 `wii-baseball-data.json`、中身は `{version,updatedAt,abs,forms,deleted}`）と自動同期。設定は localStorage `wii_sync`（token/gistId/deleted/localAt/lastSync）。打席ID単位で合体、`deleted` で削除を伝播、同じIDの食い違いは updatedAt が新しい側を採用。Claudeは `gh api gists/<id>` で最新データを読める。
 - データは localStorage（`wii_final`=打席配列、`wii_final_f`=フォーム名配列）。旧キー `wii_abs`, `wii_atbats_v3` は読み込み時に最長配列を採用。
 - 「データ」タブでJSON書き出し/読み込み可能（ブラウザ移行時は必ず先に書き出す）。
 
@@ -29,5 +30,5 @@ AVG=安打/打数(四球除く), OBP=出塁/打席, SLG=塁打/打数, 打点率
 1. index.html を読み、挙動を変えずに `index.html / style.css / app.js` に分割（任意）。
 2. Chart.js を固定バージョンで維持。スマホ表示も確認。
 3. 静的ホスティング（GitHub Pages / Netlify / Vercel）へ公開手順を用意。
-4. 将来案: データをJSONファイル or 小さなバックエンドに保存し、端末間共有できるようにする。
+4. 端末間共有: GitHub Gist 同期で実装済み（sync.js）。
 5. 既存データは「データ」タブのJSONから移行すること。
