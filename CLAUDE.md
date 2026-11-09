@@ -7,7 +7,8 @@
 - `index.html`（画面）/ `style.css`（見た目・ライト/ダーク）/ `app.js`（計算＋表示）。vanilla JS、Chart.js 4.4.1 をcdnjsから。ビルド不要。
 - GitHub Pages で公開: https://hangfzuoyain-hash.github.io/wii-baseball/ （mainにpushで反映）。CSS/JSを変えたら index.html の `?v=` を上げる（キャッシュ対策）。
 - タブ: 打席入力 / 成績一覧 / フォーム比較（全体・36球以前・36球以後を切替）/ スイング理論 / データ。URLの `#stats` などで直接開ける。
-- 打席入力タブ上部に「次のゲームのおすすめ」（1ゲーム=1フォーム運用）。優先度=ご無沙汰40+データ不足30+有望30（`REC_WEIGHTS`でモード別）。表示専用で成績計算には影響しない。
+- 打席入力はワンタップ記録：球数スライダー（1〜6球、出現率5%超まで自動拡張。それ以上は数字入力）→結果ボタンで即記録（ヒットは種類→塁打）。記録後6秒「取り消す」バーあり。3アウトで回を自動送り（3回で試合終了→次ゲーム）。試合中はフォーム・回・打席番号の欄を1行にたたむ。回・打席番号・フォームは localStorage `wii_entry` に保存（表示用）。
+- 打席入力タブ上部（新しいゲームのときだけ）に「次のゲームのおすすめ」（1ゲーム=1フォーム運用）。優先度=ご無沙汰40+データ不足30+有望30（`REC_WEIGHTS`でモード別）。表示専用で成績計算には影響しない。
 - app.js 前半の「計算部分」は式を変えないこと。表示側の打席数10未満は「参考」扱い（`UI.SMALL_N`、計算には影響しない）。
 - クラウド同期: `sync.js`。GitHubのシークレットGist（ファイル名 `wii-baseball-data.json`、中身は `{version,updatedAt,abs,forms,deleted}`）と自動同期。設定は localStorage `wii_sync`（token/gistId/deleted/localAt/lastSync）。打席ID単位で合体、`deleted` で削除を伝播、同じIDの食い違いは updatedAt が新しい側を採用。Claudeは `gh api gists/<id>` で最新データを読める。
 - データは localStorage（`wii_final`=打席配列、`wii_final_f`=フォーム名配列）。旧キー `wii_abs`, `wii_atbats_v3` は読み込み時に最長配列を採用。

@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#11121a" media="(prefers-color-scheme: dark)">
 <title>Wii Sports 打撃フォーム分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚾%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=8"></head><body>
+<link rel="stylesheet" href="style.css?v=9"></head><body>
 
 <header class="hdr">
   <div class="wrap hdr-top">
@@ -38,52 +38,27 @@
     </div>
     <div id="rec-list"></div>
   </div>
-  <div class="card">
+  <div class="card entry-card">
     <div id="game-status"></div>
-    <div class="row2">
-      <div><label for="inning">回</label>
-        <select id="inning" onchange="renderGameStatus()"><option>1回表</option><option>2回表</option><option>3回表</option></select>
+    <div class="setup" id="setup">
+      <div class="row2">
+        <div><label for="inning">回</label>
+          <select id="inning" onchange="renderGameStatus()"><option>1回表</option><option>2回表</option><option>3回表</option></select>
+        </div>
+        <div><label for="pa-num">通算打席番号 <span class="hint">1=ゲーム開始</span></label>
+          <input type="number" id="pa-num" min="1" max="30" value="1" inputmode="numeric" oninput="renderGameStatus()"/>
+        </div>
       </div>
-      <div><label for="pa-num">通算打席番号 <span class="hint">1=ゲーム開始</span></label>
-        <input type="number" id="pa-num" min="1" max="30" value="1" inputmode="numeric" oninput="renderGameStatus()"/>
+      <label for="form-name">バッティングフォーム</label>
+      <div class="form-input-wrap">
+        <input type="text" id="form-name" placeholder="入力 or 下から選択" oninput="renderChips();renderGameStatus()" autocomplete="off"/>
+        <button type="button" class="form-clear-btn" onclick="clearFN()" aria-label="クリア">×</button>
       </div>
+      <div class="chips" id="saved-forms"></div>
     </div>
-    <label for="form-name">バッティングフォーム</label>
-    <div class="form-input-wrap">
-      <input type="text" id="form-name" placeholder="入力 or 下から選択" oninput="renderChips()" autocomplete="off"/>
-      <button type="button" class="form-clear-btn" onclick="clearFN()" aria-label="クリア">×</button>
-    </div>
-    <div class="chips" id="saved-forms"></div>
 
-    <div class="rgroup">
-      <div class="stitle">安打・出塁</div>
-      <div class="pbgrid">
-        <button type="button" class="pb walk" onclick="selR(this,'四球',false)">四球</button>
-        <button type="button" class="pb" onclick="selR(this,'ゴロ安打',false)">ゴロ<wbr>安打</button>
-        <button type="button" class="pb" onclick="selR(this,'ライナー安打',false)">ライナー<wbr>安打</button>
-        <button type="button" class="pb" onclick="selR(this,'フライ安打',false)">フライ<wbr>安打</button>
-      </div>
-    </div>
-    <div class="rgroup">
-      <div class="stitle">長打（塁打数） <span class="hint">ヒットのとき何塁打か</span></div>
-      <div class="brow" id="base-btns">
-        <button type="button" class="bb sel" onclick="selB(this,1)">一塁打</button>
-        <button type="button" class="bb" onclick="selB(this,2)">二塁打</button>
-        <button type="button" class="bb" onclick="selB(this,3)">三塁打</button>
-        <button type="button" class="bb" onclick="selB(this,4)">本塁打</button>
-      </div>
-    </div>
-    <div class="rgroup">
-      <div class="stitle">アウト</div>
-      <div class="pbgrid">
-        <button type="button" class="pb out" onclick="selR(this,'ゴロアウト',true)">ゴロ<wbr>アウト</button>
-        <button type="button" class="pb out" onclick="selR(this,'ライナーアウト',true)">ライナー<wbr>アウト</button>
-        <button type="button" class="pb out" onclick="selR(this,'フライアウト',true)">フライ<wbr>アウト</button>
-        <button type="button" class="pb out" onclick="selR(this,'三振',true)">三振</button>
-      </div>
-    </div>
     <div class="pitch-slide">
-      <div class="pitch-head"><div><div class="stitle">球数</div><div class="hint" id="pitch-hint">よく出る球数はスライド、まれな球数は右に入力</div></div>
+      <div class="pitch-head"><div><div class="stitle">球数</div><div class="hint" id="pitch-hint">① 先に球数 → ② 結果をタップで記録</div></div>
         <div class="pc-big"><span id="pitch-disp">3</span><small>球</small></div></div>
       <div class="pitch-ctl">
         <div class="pr-wrap"><div class="pglass" aria-hidden="true"><div class="pfill"></div><div class="pthumb"></div></div><input type="range" id="pitch-range" class="prange" min="1" max="6" step="0.01" value="3" oninput="slideP('main',this.value)" onchange="snapP('main')" aria-label="球数（よく出る範囲）">
@@ -91,9 +66,33 @@
         <label class="pnum"><span id="pitch-more">7球〜</span><input type="number" id="pitch-num" inputmode="numeric" min="7" max="30" placeholder="入力" oninput="numPitch('main',this.value)" aria-label="まれな球数を入力"></label>
       </div>
     </div>
-    <div class="actions">
-      <button type="button" class="btn btnp btn-rec" onclick="addAB()">打席を記録する</button>
-      <button type="button" class="btn" onclick="clearR()">結果クリア</button>
+
+    <div class="rgroup">
+      <div class="stitle">出塁 <span class="hint">四球はタップで記録。ヒットは種類 → 塁打</span></div>
+      <div class="pbgrid">
+        <button type="button" class="pb walk" onclick="qRec('四球',false,0)">四球</button>
+        <button type="button" class="pb hit" data-hit="ゴロ安打" onclick="pickHit(this)">ゴロ<wbr>安打</button>
+        <button type="button" class="pb hit" data-hit="ライナー安打" onclick="pickHit(this)">ライナー<wbr>安打</button>
+        <button type="button" class="pb hit" data-hit="フライ安打" onclick="pickHit(this)">フライ<wbr>安打</button>
+      </div>
+      <div class="hit-pick" id="hit-pick" aria-hidden="true">
+        <div class="stitle" id="hit-pick-t">何塁打？</div>
+        <div class="brow" id="base-btns">
+          <button type="button" class="bb" onclick="qBase(1)">一塁打</button>
+          <button type="button" class="bb" onclick="qBase(2)">二塁打</button>
+          <button type="button" class="bb" onclick="qBase(3)">三塁打</button>
+          <button type="button" class="bb hr" onclick="qBase(4)">本塁打</button>
+        </div>
+      </div>
+    </div>
+    <div class="rgroup">
+      <div class="stitle">アウト <span class="hint">タップで記録</span></div>
+      <div class="pbgrid">
+        <button type="button" class="pb out" onclick="qRec('ゴロアウト',true,0)">ゴロ<wbr>アウト</button>
+        <button type="button" class="pb out" onclick="qRec('ライナーアウト',true,0)">ライナー<wbr>アウト</button>
+        <button type="button" class="pb out" onclick="qRec('フライアウト',true,0)">フライ<wbr>アウト</button>
+        <button type="button" class="pb out" onclick="qRec('三振',true,0)">三振</button>
+      </div>
     </div>
   </div>
   <div class="card">
@@ -240,6 +239,6 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="app.js?v=8"></script>
-<script src="sync.js?v=8"></script>
+<script src="app.js?v=9"></script>
+<script src="sync.js?v=9"></script>
 </body></html>

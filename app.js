@@ -291,11 +291,11 @@ function renderChips(){
     return '<button type="button" class="chip'+(f===cur?' sel':'')+'" data-f="'+esc(f)+'" onclick="pickF(this.dataset.f)">'+esc(f)+'</button>';
   }).join('');
 }
-function pickF(n){document.getElementById('form-name').value=n;renderChips();}
+function pickF(n){document.getElementById('form-name').value=n;renderChips();renderGameStatus();}
 function clearFN(){document.getElementById('form-name').value='';renderChips();}
 function clearR(){
   rB=1;pitchCount=3;
-  resetResultBtns();
+  resetResultBtns();if(typeof cancelHit==='function')cancelHit();
   setBN(1);
   setPitch(3);
 }
@@ -384,15 +384,80 @@ function addAB(){
     var sel=document.getElementById('inning');
     if(sel.selectedIndex<sel.options.length-1){
       sel.selectedIndex++;
-      flash('3アウト → '+sel.value+'へ');
+      advMsg='3アウト → '+sel.value+'へ';
     }else{
       sel.selectedIndex=0;document.getElementById('pa-num').value=1;
-      flash('試合終了 → 次のゲーム（1回表・打席1）へ');
+      advMsg='試合終了 → 次のゲームへ';
     }
   }
   clearR();
   refreshAfterChange();
 }
+
+/* ---------- ワンタップ記録：球数を決めて、結果ボタンを押したら記録 ---------- */
+var advMsg='',pendingHit=null,recLock=false,undoState=null;
+function pickHit(btn){
+  var v=btn.getAttribute('data-hit');
+  if(pendingHit===v){cancelHit();return;}
+  pendingHit=v;
+  document.querySelectorAll('.pb').forEach(function(b){b.classList.toggle('sel',b===btn);});
+  $('hit-pick-t').textContent=v+' … 何塁打？（もう一度押すとやめる）';
+  var hp=$('hit-pick');hp.classList.add('open');hp.setAttribute('aria-hidden','false');
+}
+function cancelHit(){
+  pendingHit=null;
+  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
+  var hp=$('hit-pick');if(hp){hp.classList.remove('open');hp.setAttribute('aria-hidden','true');}
+}
+function qBase(n){if(pendingHit)qRec(pendingHit,false,n);}
+function curGameForm(){
+  var nextPa=parseInt($('pa-num').value)||1;if(nextPa===1)return '';
+  var sorted=ABS.slice().sort(function(a,b){return a.id-b.id;});
+  for(var i=sorted.length-1;i>=0;i--){if(sorted[i].paNum===1)return sorted[i].form;}
+  return '';
+}
+function qRec(val,isOut,bases){
+  if(recLock)return;
+  var fe=$('form-name');
+  if(!fe.value.trim()){
+    var g=curGameForm();
+    if(g&&g!=='（未設定）'){fe.value=g;renderChips();}
+    else{UI.setupOpen=true;renderGameStatus();flash('先にフォームを選んでください');fe.focus();return;}
+  }
+  var before={inning:$('inning').selectedIndex,pa:$('pa-num').value,pitch:pitchCount};
+  rV=val;rO=isOut;rB=bases||1;advMsg='';
+  var n0=ABS.length;addAB();
+  if(ABS.length===n0)return;
+  var a=ABS[ABS.length-1];
+  cancelHit();
+  if((parseInt($('pa-num').value)||1)!==1)UI.setupOpen=false;
+  renderGameStatus();
+  recLock=true;setTimeout(function(){recLock=false;},350);
+  var nm=['','一塁打','二塁打','三塁打','本塁打'];
+  var lbl=a.result+(a.isHit&&a.bases>=1?'（'+nm[a.bases]+'）':'')+' · '+a.pitches+'球';
+  showUndo(a.id,before,lbl,advMsg);
+}
+function showUndo(id,before,lbl,adv){
+  undoState={id:id,before:before};
+  var e=$('undo-bar');
+  if(!e){e=document.createElement('div');e.id='undo-bar';e.className='undo-bar';e.setAttribute('role','status');document.body.appendChild(e);}
+  e.innerHTML='<div class="ub-t"><b>✓ 記録</b> '+esc(lbl)+(adv?'<div class="ub-adv">'+esc(adv)+'</div>':'')+'</div><button type="button" onclick="undoRec()">取り消す</button>';
+  e.classList.remove('show');void e.offsetWidth;e.classList.add('show');
+  clearTimeout(showUndo._t);showUndo._t=setTimeout(function(){e.classList.remove('show');undoState=null;},6000);
+}
+function undoRec(){
+  if(!undoState)return;
+  var u=undoState;undoState=null;
+  if(window.SYNC)SYNC.markDeleted(u.id);
+  ABS=ABS.filter(function(x){return x.id!==u.id;});
+  ABS=recalcRBI(ABS);saveA();
+  $('inning').selectedIndex=u.before.inning;$('pa-num').value=u.before.pa;
+  setPitch(u.before.pitch);
+  var e=$('undo-bar');if(e)e.classList.remove('show');
+  refreshAfterChange();
+  flash('取り消しました');
+}
+function toggleSetup(){UI.setupOpen=!$('setup').classList.contains('open');renderGameStatus();if(UI.setupOpen)$('setup').scrollIntoView({behavior:'smooth',block:'nearest'});}
 
 // 画面下に数秒だけ出るお知らせ
 function flash(m){
@@ -420,7 +485,8 @@ function renderGameStatus(){
   var isNew=nextPa===1||!sorted.length;
   var c=isNew?0:cum;
   var r=getCurrentRunners($('inning').value,nextPa);
-  var title=isNew?'新しいゲーム（第'+(games+1)+'試合）':'第'+games+'試合 · '+pa+'打席消化';
+  var fname=isNew?($('form-name').value.trim()||''):(curGameForm()||$('form-name').value.trim());
+  var title=isNew?'新しいゲーム（第'+(games+1)+'試合）'+(fname?' · '+esc(fname):''):'第'+games+'試合 · '+esc(fname)+' · '+pa+'打席消化';
   var after=c>=THRESHOLD;
   var sub=after?'累計 <b>'+c+'</b>球 → 次の打席は <b>36球以後</b>（投手疲労）':'累計 <b>'+c+'</b>球 → 36球まであと <b>'+(THRESHOLD-c)+'</b>球';
   var names=['一','二','三'],on=[];r.forEach(function(x,i){if(x)on.push(names[i]);});
@@ -432,8 +498,13 @@ function renderGameStatus(){
     '<rect class="base'+(r[2]?' on':'')+'" x="3" y="18" width="12" height="12" transform="rotate(45 9 24)"/>'+
     '<rect class="base'+(r[0]?' on':'')+'" x="31" y="18" width="12" height="12" transform="rotate(45 37 24)"/>'+
     '<rect class="base home" x="18" y="33" width="10" height="10" transform="rotate(45 23 38)"/></svg>';
-  el.innerHTML='<div class="gstat">'+svg+'<div class="gstat-body"><div class="gstat-t">'+title+' · '+runnerTxt+'</div>'+
-    '<div class="gstat-s">'+sub+'</div><div class="pbar'+(after?' over':'')+'"><i style="width:'+Math.min(100,c/THRESHOLD*100)+'%"></i></div></div></div>';
+  try{localStorage.setItem('wii_entry',JSON.stringify({inning:$('inning').selectedIndex,pa:nextPa,form:$('form-name').value.trim()}));}catch(x){}
+  var open=isNew||!!UI.setupOpen;
+  var st=$('setup');if(st)st.classList.toggle('open',open);
+  el.innerHTML='<div class="gstat'+(isNew&&!fname?' need':'')+'">'+svg+'<div class="gstat-body"><div class="gstat-t">'+title+' · '+runnerTxt+'</div>'+
+    '<div class="gstat-s">'+sub+'</div><div class="pbar'+(after?' over':'')+'"><i style="width:'+Math.min(100,c/THRESHOLD*100)+'%"></i></div>'+
+    (isNew&&!fname?'<div class="gstat-need">↓ まずフォームを選んでください</div>':'')+'</div>'+
+    (isNew?'':'<button type="button" class="gs-edit" onclick="toggleSetup()" aria-expanded="'+open+'">'+(open?'閉じる':'変更')+'</button>')+'</div>';
   renderRecommend();
 }
 
@@ -541,6 +612,7 @@ function renderRecommend(){
   var nextPa=parseInt($('pa-num').value)||1;
   var midGame=nextPa!==1&&games.length>0;
   var curForm=midGame?games[games.length-1].form:null;
+  var rc=$('rec-card');if(rc)rc.style.display=midGame?'none':'';
   $('rec-sub').innerHTML=midGame?'いま第'+games.length+'試合（'+esc(curForm)+'）の途中です。次のゲームの候補：':'1ゲーム＝1フォーム。次のゲームで使うフォームの候補です。';
   if(!items.length){listEl.innerHTML='<p class="empty">フォームがまだありません</p>';return;}
   var top=items.slice(0,3),rest=items.slice(3);
@@ -974,6 +1046,10 @@ function importFromFile(inp){var f=inp.files[0];if(!f)return;var r=new FileReade
 /* ============================================================
    起動
    ============================================================ */
+// 記録途中の「回・打席番号・フォーム」を復元（再読み込みしても試合の続きから）
+(function(){try{var e=JSON.parse(localStorage.getItem('wii_entry')||'null');
+  if(e&&ABS.length&&(e.pa|0)>1){$('inning').selectedIndex=e.inning|0;$('pa-num').value=e.pa;}
+  if(e&&e.form)$('form-name').value=e.form;}catch(x){}})();
 renderHeader();renderRecent();renderChips();renderGameStatus();updatePitchSlider();
 switchTab((location.hash||'').slice(1)||'entry');
 window.addEventListener('hashchange',function(){var h=(location.hash||'').slice(1);if(h&&h!==CUR_TAB)switchTab(h);});
