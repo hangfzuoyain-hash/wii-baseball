@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#11121a" media="(prefers-color-scheme: dark)">
 <title>Wii Sports 打撃フォーム分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚾%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=6"></head><body>
+<link rel="stylesheet" href="style.css?v=7"></head><body>
 
 <header class="hdr">
   <div class="wrap hdr-top">
@@ -83,10 +83,13 @@
       </div>
     </div>
     <div class="pitch-slide">
-      <div class="pitch-head"><div><div class="stitle">球数</div><div class="hint">投手に投げさせた球数（左右にスライド）</div></div>
+      <div class="pitch-head"><div><div class="stitle">球数</div><div class="hint" id="pitch-hint">よく出る球数はスライド、まれな球数は右に入力</div></div>
         <div class="pc-big"><span id="pitch-disp">3</span><small>球</small></div></div>
-      <input type="range" id="pitch-range" class="prange" min="1" max="15" step="1" value="3" oninput="setPitch(this.value)" aria-label="球数">
-      <div class="pticks" aria-hidden="true"><span>1</span><span>5</span><span>10</span><span>15</span></div>
+      <div class="pitch-ctl">
+        <div class="pr-wrap"><input type="range" id="pitch-range" class="prange" min="1" max="5" step="1" value="3" oninput="setPitch(this.value)" aria-label="球数（よく出る範囲）">
+          <div class="pticks" id="pitch-ticks" aria-hidden="true"></div></div>
+        <label class="pnum"><span id="pitch-more">6球〜</span><input type="number" id="pitch-num" inputmode="numeric" min="6" max="30" placeholder="入力" oninput="numPitch('main',this.value)" aria-label="まれな球数を入力"></label>
+      </div>
     </div>
     <div class="actions">
       <button type="button" class="btn btnp btn-rec" onclick="addAB()">打席を記録する</button>
@@ -220,7 +223,11 @@
     <div class="mrow"><label>球数</label>
       <div class="pitch-slide in-modal">
         <div class="pc-big"><span id="e-pitch-disp">3</span><small>球</small></div>
-        <input type="range" id="e-pitch-range" class="prange" min="1" max="15" step="1" value="3" oninput="setEP(this.value)" aria-label="球数">
+        <div class="pitch-ctl">
+          <div class="pr-wrap"><input type="range" id="e-pitch-range" class="prange" min="1" max="5" step="1" value="3" oninput="setEP(this.value)" aria-label="球数（よく出る範囲）">
+            <div class="pticks" id="e-pitch-ticks" aria-hidden="true"></div></div>
+          <label class="pnum"><span id="e-pitch-more">6球〜</span><input type="number" id="e-pitch-num" inputmode="numeric" min="6" max="30" placeholder="入力" oninput="numPitch('edit',this.value)" aria-label="まれな球数を入力"></label>
+        </div>
       </div>
     </div>
     <div class="mrow"><label>通算打席番号</label><input type="number" id="e-panum" min="1" max="30"/></div>
@@ -233,6 +240,6 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="app.js?v=6"></script>
-<script src="sync.js?v=6"></script>
+<script src="app.js?v=7"></script>
+<script src="sync.js?v=7"></script>
 </body></html>

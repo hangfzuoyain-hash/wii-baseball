@@ -301,10 +301,43 @@ function clearR(){
 }
 function changePitch(d){pitchCount=Math.max(1,Math.min(15,pitchCount+d));document.getElementById('pitch-disp').textContent=pitchCount;}
 function changeEP(d){epc=Math.max(1,Math.min(15,epc+d));document.getElementById('e-pitch-disp').textContent=epc;}
-// 球数スライダー（記録画面・編集画面）
-function setPitch(v){pitchCount=Math.max(1,Math.min(15,parseInt(v)||1));document.getElementById('pitch-disp').textContent=pitchCount;var r=document.getElementById('pitch-range');if(r&&+r.value!==pitchCount)r.value=pitchCount;paintRange(r);}
-function setEP(v){epc=Math.max(1,Math.min(15,parseInt(v)||1));document.getElementById('e-pitch-disp').textContent=epc;var r=document.getElementById('e-pitch-range');if(r&&+r.value!==epc)r.value=epc;paintRange(r);}
+// 球数入力（記録画面・編集画面）：よく出る球数(出現率5%超)はスライダー、まれな球数は数字入力
+var PITCH_RARE=0.05, PITCH_MAXIN=30, pitchSlideMax=5;
+var PIN={main:{range:'pitch-range',num:'pitch-num',disp:'pitch-disp',ticks:'pitch-ticks',more:'pitch-more'},
+         edit:{range:'e-pitch-range',num:'e-pitch-num',disp:'e-pitch-disp',ticks:'e-pitch-ticks',more:'e-pitch-more'}};
+// スライダーの上限 = 1球から数えて、出現率が5%を超え続ける最大の球数（データが少ないうちは5）
+function calcPitchSlideMax(){
+  if(ABS.length<30)return 5;
+  var cnt={};ABS.forEach(function(a){cnt[a.pitches]=(cnt[a.pitches]||0)+1;});
+  var m=0;for(var k=1;k<=PITCH_MAXIN;k++){if((cnt[k]||0)/ABS.length>PITCH_RARE)m=k;else break;}
+  return Math.max(3,Math.min(10,m));
+}
+function showPitch(which,v){
+  var p=PIN[which],r=$(p.range),n=$(p.num);
+  $(p.disp).textContent=v;
+  var big=v>pitchSlideMax;
+  if(r){r.max=pitchSlideMax;if(!big)r.value=v;r.classList.toggle('off',big);paintRange(r);}
+  if(n){n.min=pitchSlideMax+1;if(!big&&document.activeElement!==n)n.value='';else if(big&&+n.value!==v&&document.activeElement!==n)n.value=v;n.parentNode.classList.toggle('on',big);}
+}
+function clampP(v){return Math.max(1,Math.min(PITCH_MAXIN,parseInt(v)||1));}
+function setPitch(v){pitchCount=clampP(v);var n=$('pitch-num');if(n&&pitchCount<=pitchSlideMax)n.value='';showPitch('main',pitchCount);}
+function setEP(v){epc=clampP(v);var n=$('e-pitch-num');if(n&&epc<=pitchSlideMax)n.value='';showPitch('edit',epc);}
+function numPitch(which,val){
+  var r=$(PIN[which].range);
+  var v=val===''?(+r.value):clampP(val);
+  if(which==='main')pitchCount=v;else epc=v;
+  showPitch(which,v);
+}
 function paintRange(r){if(r)r.style.setProperty('--p',((r.value-r.min)/(r.max-r.min)*100)+'%');}
+function updatePitchSlider(){
+  pitchSlideMax=calcPitchSlideMax();
+  ['main','edit'].forEach(function(w){
+    var p=PIN[w],t=$(p.ticks),m=$(p.more);
+    if(t){var h='';for(var i=1;i<=pitchSlideMax;i++)h+='<span style="--k:'+((i-1)/(pitchSlideMax-1))+'">'+i+'</span>';t.innerHTML=h;}
+    if(m)m.textContent=(pitchSlideMax+1)+'球〜';
+  });
+  showPitch('main',pitchCount);showPitch('edit',epc);
+}
 
 function addAB(){
   var fn=document.getElementById('form-name').value.trim()||'（未設定）';
@@ -882,6 +915,7 @@ function switchTab(name){
   renderTab(name);
 }
 function refreshAfterChange(){
+  updatePitchSlider();
   renderHeader();renderRecent();renderChips();renderGameStatus();
   if(CUR_TAB!=='entry')renderTab(CUR_TAB);
   if(window.SYNC)SYNC.onLocalChange(); // クラウド同期へ通知（sync.js）
@@ -916,6 +950,6 @@ function importFromFile(inp){var f=inp.files[0];if(!f)return;var r=new FileReade
 /* ============================================================
    起動
    ============================================================ */
-renderHeader();renderRecent();renderChips();renderGameStatus();
+renderHeader();renderRecent();renderChips();renderGameStatus();updatePitchSlider();
 switchTab((location.hash||'').slice(1)||'entry');
 window.addEventListener('hashchange',function(){var h=(location.hash||'').slice(1);if(h&&h!==CUR_TAB)switchTab(h);});
