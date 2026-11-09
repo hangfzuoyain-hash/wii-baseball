@@ -1,10 +1,16 @@
 var ABS=[], FMS=[];
-var rV='', rO=false, rB=1, CH=null, CH36=null, CHA36=null, editId=null;
+var rV='', rO=false, rB=1, editId=null;
 var pitchCount=3, epc=3;
 var THRESHOLD=36;
 var swingSortKey='pred', swingSortDir=-1;
 var REG_MODEL=null;
+// 表示用の状態（計算結果には影響しない）
+var UI={statsPeriod:'all',cmpPeriod:'all',cmpMetric:'score',formSort:{key:'score',dir:-1},logLimit:30,logForm:'',SMALL_N:10};
+var CMP_CHART=null, SWING_CHART=null;
 
+/* ============================================================
+   計算部分（式は変更しない）
+   ============================================================ */
 function fmt(v){var n=parseFloat(v);if(isNaN(n))return'.000';var s=n.toFixed(3);return n<1&&n>-1?(n<0?'-'+Math.abs(n).toFixed(3).slice(1):s.slice(1)):s;}
 
 function simAdvance(runners,bases,isBB){
@@ -51,39 +57,10 @@ function calcScoreAfter36(s){if(!s)return 0;return (s.obp*5)+(Math.min(s.avgP,10
   try{var sf=JSON.parse(localStorage.getItem('wii_final_f')||'null');if(sf&&sf.length)FMS=sf;}catch(e){}
   if(!FMS.length)FMS=['イチロー','ブライスハーパー','ニックカーツ','バース','大谷翔平'];
   saveA();
-  document.getElementById('restore-banner').innerHTML=
-    '<div style="font-size:11px;color:#1a7a40;background:#d4f0e0;padding:4px 10px;border-radius:6px;margin-bottom:8px;">'+
-    'データ '+ABS.length+' 打席を読み込みました（重回帰分析による新総合スコアを追加）</div>';
 })();
 
 function saveA(){try{localStorage.setItem('wii_final',JSON.stringify(ABS));}catch(e){}}
 function saveF(){try{localStorage.setItem('wii_final_f',JSON.stringify(FMS));}catch(e){}}
-
-function selR(btn,val,isOut){
-  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
-  btn.classList.add('sel');rV=val;rO=isOut;
-  var bw=document.getElementById('base-btns');
-  bw.style.opacity=isOut?'0.3':'1';bw.style.pointerEvents=isOut?'none':'';
-}
-function selB(btn,n){document.querySelectorAll('.bb').forEach(function(b){b.classList.remove('sel');});btn.classList.add('sel');rB=n;}
-function setBN(n){document.querySelectorAll('.bb').forEach(function(b,i){b.classList.toggle('sel',i===n-1);});rB=n;}
-function renderChips(){
-  var el=document.getElementById('saved-forms'),cur=document.getElementById('form-name').value.trim();
-  el.innerHTML=FMS.map(function(f){
-    return '<span class="chip'+(f===cur?' sel':'')+'" onclick="pickF(\''+f.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+f+'</span>';
-  }).join('');
-}
-function pickF(n){document.getElementById('form-name').value=n;renderChips();}
-function clearFN(){document.getElementById('form-name').value='';renderChips();}
-function clearR(){
-  rV='';rO=false;rB=1;pitchCount=3;
-  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
-  setBN(1);
-  document.getElementById('base-btns').style.opacity='1';document.getElementById('base-btns').style.pointerEvents='';
-  document.getElementById('pitch-disp').textContent='3';
-}
-function changePitch(d){pitchCount=Math.max(1,Math.min(15,pitchCount+d));document.getElementById('pitch-disp').textContent=pitchCount;}
-function changeEP(d){epc=Math.max(1,Math.min(15,epc+d));document.getElementById('e-pitch-disp').textContent=epc;}
 
 function getCurrentRunners(targetInning,targetPaNum){
   var sorted=ABS.slice().sort(function(a,b){return a.id-b.id;});
@@ -99,44 +76,6 @@ function getCurrentRunners(targetInning,targetPaNum){
   return simR;
 }
 
-function addAB(){
-  var fn=document.getElementById('form-name').value.trim()||'（未設定）';
-  var inn=document.getElementById('inning').value;
-  var pan=parseInt(document.getElementById('pa-num').value)||1;
-  if(!rV){alert('打席結果を選択してください');return;}
-  var bases=rO?0:(rV==='四球'?0:rB);
-  var isOut=rO,isBB=rV==='四球';
-  var simR=getCurrentRunners(inn,pan);
-  var rbi=0;
-  if(!isOut){var res2=simAdvance(simR,bases,isBB);rbi=res2.rbi;}
-  ABS.push({id:Date.now(),form:fn,inning:inn,result:rV,pitches:pitchCount,paNum:pan,bases:bases,rbi:rbi,
-    isOut:isOut,isOnBase:!isOut,isGoro:rV.indexOf('ゴロ')===0,isLiner:rV.indexOf('ライナー')===0,
-    isHit:!isOut&&!isBB,isBB:isBB});
-  saveA();
-  if(fn!=='（未設定）'&&FMS.indexOf(fn)<0){FMS.push(fn);saveF();}
-  renderChips();
-  document.getElementById('pa-num').value=pan+1;
-  clearR();renderRecent();
-  if(document.getElementById('tab-stats').classList.contains('active'))renderStats();
-  if(document.getElementById('tab-swing').classList.contains('active'))renderSwing();
-  if(document.getElementById('tab-compare').classList.contains('active'))renderCompare('all');
-  if(document.getElementById('tab-compare36').classList.contains('active'))renderCompare('before36');
-  if(document.getElementById('tab-compareAfter36').classList.contains('active'))renderCompare('after36');
-}
-
-function mkB(a){
-  var isHR=a.bases===4&&!a.isOut;
-  var cls=isHR?'bhr':a.isBB?'bbb':a.isOut?'bo':'bh';
-  var nm=['','一','二','三','本'];
-  var lbl=(a.bases>=2&&!a.isOut&&!a.isBB)?a.result+'('+nm[a.bases]+'打)':a.result;
-  return '<span class="badge '+cls+'">'+lbl+'</span>';
-}
-function renderRecent(){
-  var el=document.getElementById('recent-log'),r=ABS.slice().reverse().slice(0,5);
-  if(!r.length){el.innerHTML='<p class="empty">まだデータがありません</p>';return;}
-  el.innerHTML='<table class="ltab"><thead><tr><th>回</th><th>フォーム</th><th>結果</th><th>球</th><th>打点</th></tr></thead><tbody>'+
-    r.map(function(a){return '<tr><td>'+a.inning+'</td><td style="font-size:10px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+a.form+'</td><td>'+mkB(a)+'</td><td>'+a.pitches+'</td><td>'+(a.rbi||0)+'</td></tr>';}).join('')+'</tbody></table>';
-}
 function calc(list){
   var n=list.length;if(!n)return null;
   var ob=list.filter(function(a){return a.isOnBase;}).length;
@@ -253,122 +192,6 @@ function predictRBI(model,timing,iso,nongoro){
   return model.coeffs[0]+model.coeffs[1]*zt+model.coeffs[2]*zi+model.coeffs[3]*zn;
 }
 
-function regressionNoteHtml(model){
-  if(!model){
-    return '<div class="reg-note">⚠ 重回帰分析には打席数3以上のフォームが5つ以上必要です。データが増えると自動的に計算されます。</div>';
-  }
-  var c=model.coeffs;
-  return '<div class="reg-note">'+
-    '📈 <b>重回帰分析モデル</b>（対象'+model.nForms+'フォーム, 決定係数 R²='+model.r2.toFixed(3)+'）<br>'+
-    '予測打点率 = '+c[0].toFixed(4)+' + '+c[1].toFixed(4)+'×z(①タイミング) + '+c[2].toFixed(4)+'×z(②スピード) + '+c[3].toFixed(4)+'×z(③アングル)<br>'+
-    '<span style="color:#3a8a5e;font-size:9.5px;">z(...)は各指標を偏差値化（平均50・標準偏差10）した値。係数が大きいほど打点率への影響が強い。</span>'+
-    '</div>';
-}
-
-function statsCards(s,scoreFn){
-  var sc=scoreFn(s);
-  return '<div class="sc"><div class="n">'+s.n+'</div><div class="d">打席</div></div>'+
-    '<div class="sc"><div class="n">'+s.games+'</div><div class="d">ゲーム数</div></div>'+
-    '<div class="sc"><div class="n">'+fmt(s.avg)+'</div><div class="d">打率</div></div>'+
-    '<div class="sc"><div class="n">'+fmt(s.obp)+'</div><div class="d">出塁率</div></div>'+
-    '<div class="sc"><div class="n">'+fmt(s.slg)+'</div><div class="d">長打率</div></div>'+
-    '<div class="sc"><div class="n">'+fmt(s.rbiRate)+'</div><div class="d">打点率</div></div>'+
-    '<div class="sc"><div class="n">'+s.avgP.toFixed(1)+'</div><div class="d">平均球数</div></div>'+
-    '<div class="sc"><div class="n">'+fmt(s.nonGoroRate)+'</div><div class="d">非ゴロ率</div></div>'+
-    '<div class="sc"><div class="n">'+sc.toFixed(1)+'</div><div class="d">総合スコア</div></div>';
-}
-function formTable(data,scoreFn,noteHtml,model){
-  var byF={};
-  data.forEach(function(a){if(!byF[a.form])byF[a.form]=[];byF[a.form].push(a);});
-  var forms=Object.keys(byF).map(function(f){
-    var fs=calc(byF[f]);
-    var raw=calcSwingRaw(byF[f]);
-    var pred=model&&raw?predictRBI(model,raw.timing,raw.iso,raw.nongoro):null;
-    var residual=pred!==null?fs.rbiRate-pred:null;
-    return{form:f,stats:fs,score:scoreFn(fs),pred:pred,residual:residual};
-  }).sort(function(a,b){return b.score-a.score;});
-  var rows=forms.map(function(item,idx){
-    var fs=item.stats,sc=item.score,f=item.form,isTop=idx===0;
-    var predTxt=item.pred!==null?fmt(item.pred):'—';
-    var resTxt=item.residual!==null?(item.residual>=0?'+':'')+fmt(item.residual):'—';
-    var resCls=item.residual===null?'':(item.residual>=0?'pos-res':'neg-res');
-    return '<tr'+(isTop?' style="background:#f0f0ff;"':'')+'>'+
-      '<td style="font-weight:'+(isTop?'700':'500')+';color:'+(isTop?'#4444cc':'#222')+'">'+(isTop?'🥇 ':'')+f+'</td>'+
-      '<td>'+fs.n+'</td><td>'+fs.games+'</td><td>'+fmt(fs.avg)+'</td><td>'+fmt(fs.obp)+'</td>'+
-      '<td>'+fmt(fs.slg)+'</td><td>'+fmt(fs.rbiRate)+'</td><td>'+fs.avgP.toFixed(1)+'</td>'+
-      '<td>'+fmt(fs.nonGoroRate)+'</td>'+
-      '<td style="font-weight:600;color:'+(isTop?'#4444cc':'#333')+'">'+sc.toFixed(1)+'</td>'+
-      '<td style="font-weight:600;color:#0a6b3e;">'+predTxt+'</td>'+
-      '<td class="'+resCls+'">'+resTxt+'</td>'+
-      '</tr>';
-  }).join('');
-  return '<div class="score-note">'+noteHtml+'</div>'+
-    '<table class="ltab" style="margin-top:4px;"><thead><tr>'+
-    '<th style="text-align:left;">フォーム</th><th>打席</th><th>ゲーム</th><th>打率</th><th>出塁率</th><th>長打率</th><th>打点率</th><th>平均球数</th><th>非ゴロ率</th><th>スコア</th>'+
-    '<th>新スコア<br><span style="font-weight:400;">(予測打点率)</span></th><th>乖離</th>'+
-    '</tr></thead><tbody>'+(rows||'<tr><td colspan="12" style="text-align:center;color:#bbb">データなし</td></tr>')+'</tbody></table>';
-}
-
-function renderSwing(){
-  REG_MODEL=computeRegressionModel();
-  document.getElementById('reg-note-swing').innerHTML=regressionNoteHtml(REG_MODEL);
-
-  var byF={};
-  ABS.forEach(function(a){if(!byF[a.form])byF[a.form]=[];byF[a.form].push(a);});
-  var forms=Object.keys(byF).map(function(f){
-    var raw=calcSwingRaw(byF[f]);
-    if(!raw)return null;
-    var pred=REG_MODEL?predictRBI(REG_MODEL,raw.timing,raw.iso,raw.nongoro):null;
-    var residual=pred!==null?raw.rbiRate-pred:null;
-    return{form:f,raw:raw,pred:pred,residual:residual};
-  }).filter(function(item){return item && item.raw.n>=3;});
-
-  forms.sort(function(a,b){
-    var av = swingSortKey==='pred'?(a.pred||-999) : swingSortKey==='residual'?(a.residual||-999) : a.raw[swingSortKey];
-    var bv = swingSortKey==='pred'?(b.pred||-999) : swingSortKey==='residual'?(b.residual||-999) : b.raw[swingSortKey];
-    return (bv-av)*swingSortDir*-1;
-  });
-
-  var arrow=function(key){return swingSortKey===key ? (swingSortDir===-1?'▼':'▲') : '';};
-
-  var rows=forms.map(function(item){
-    var f=item.form, raw=item.raw;
-    var predTxt=item.pred!==null?fmt(item.pred):'—';
-    var resTxt=item.residual!==null?(item.residual>=0?'+':'')+fmt(item.residual):'—';
-    var resCls=item.residual===null?'':(item.residual>=0?'pos-res':'neg-res');
-    return '<tr>'+
-      '<td style="font-weight:500;text-align:left;">'+f+'</td>'+
-      '<td>'+raw.n+'</td>'+
-      '<td>'+raw.timing.toFixed(3)+'</td>'+
-      '<td>'+fmt(raw.iso)+'</td>'+
-      '<td>'+fmt(raw.nongoro)+'</td>'+
-      '<td>'+fmt(raw.rbiRate)+'</td>'+
-      '<td style="font-weight:600;color:#0a6b3e;">'+predTxt+'</td>'+
-      '<td class="'+resCls+'">'+resTxt+'</td>'+
-      '</tr>';
-  }).join('');
-
-  document.getElementById('swing-table').innerHTML=
-    '<table class="ltab"><thead><tr>'+
-    '<th style="text-align:left;">フォーム</th><th>打席</th>'+
-    '<th class="sortable-th" onclick="sortSwing(\'timing\')">①タイミング'+arrow('timing')+'</th>'+
-    '<th class="sortable-th" onclick="sortSwing(\'iso\')">②スピード'+arrow('iso')+'</th>'+
-    '<th class="sortable-th" onclick="sortSwing(\'nongoro\')">③アングル'+arrow('nongoro')+'</th>'+
-    '<th>実際の打点率</th>'+
-    '<th class="sortable-th" onclick="sortSwing(\'pred\')">④新スコア<br><span style="font-weight:400;font-size:9px;">予測打点率</span>'+arrow('pred')+'</th>'+
-    '<th class="sortable-th" onclick="sortSwing(\'residual\')">乖離<br><span style="font-weight:400;font-size:9px;">実際−予測</span>'+arrow('residual')+'</th>'+
-    '</tr></thead><tbody>'+
-    (rows||'<tr><td colspan="8" style="text-align:center;color:#bbb">3打席以上のフォームがありません</td></tr>')+
-    '</tbody></table>'+
-    '<div style="font-size:9.5px;color:#888;margin-top:6px;">💡乖離がプラスのフォームは実力以上の結果、マイナスは「タイミング・スピード・アングルは優秀だが結果が出ていない＝不運だがポテンシャルが高い」フォームです。</div>';
-}
-
-window.sortSwing=function(key){
-  if(swingSortKey===key){swingSortDir=swingSortDir===-1?1:-1;}
-  else{swingSortKey=key;swingSortDir=-1;}
-  renderSwing();
-};
-
 function get36before(){
   var sorted=ABS.slice().sort(function(a,b){return a.id-b.id;});
   var cum=0,res=[];
@@ -391,46 +214,442 @@ var noteAll='📐 <strong>全体スコア（長打率重視）</strong><br>出�
 var noteBefore='📐 <strong>36球以前スコア（出塁率・球数重視）</strong><br>出塁率×35点 ＋ 平均球数÷10×30点 ＋ 非ゴロ率×10点 ＋ 長打率÷2×25点';
 var noteAfter='📐 <strong>36球以後スコア（長打率を圧倒的に重視）</strong><br>出塁率×5点 ＋ 平均球数÷10×5点 ＋ 非ゴロ率×30点 ＋ 長打率÷2×60点';
 
+/* ============================================================
+   表示用の小道具
+   ============================================================ */
+var PERIODS={
+  all:{label:'全体',data:function(){return ABS;},score:calcScoreAll,note:noteAll,desc:'全打席が対象。長打率を最重視したスコア。'},
+  before36:{label:'36球以前',data:get36before,score:calcScoreBefore36,note:noteBefore,desc:'ゲーム内の累計球数が36球未満の打席。出塁率・球数を重視。'},
+  after36:{label:'36球以後',data:get36after,score:calcScoreAfter36,note:noteAfter,desc:'累計36球以後（投手が疲れた後）の打席。長打率を圧倒的に重視。'}
+};
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function groupByForm(data){var byF={};data.forEach(function(a){if(!byF[a.form])byF[a.form]=[];byF[a.form].push(a);});return byF;}
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function accentA(a){return 'rgba('+cssVar('--accent-rgb')+','+a+')';}
+function setSeg(id,v){var el=$(id);if(!el)return;el.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);});}
+function sgn(v){return (v>=0?'+':'')+fmt(v);}
+function resCell(v){if(v===null)return '<td>—</td>';return '<td class="'+(v>=0?'pos-res':'neg-res')+'">'+sgn(v)+'</td>';}
+function wrapTable(html){return '<div class="tbl-wrap">'+html+'</div>';}
+
+// 列ごとに「上位ほど濃い」色をつける（打席数が少ないフォームは基準から外す）
+function heatFn(rows,get,nOf){
+  var base=rows.filter(function(r){return nOf(r)>=UI.SMALL_N;});if(base.length<2)base=rows;
+  var vals=base.map(get).filter(function(v){return v!==null&&isFinite(v);});
+  if(vals.length<2)return function(){return 0;};
+  var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+  return function(v){if(v===null||mx===mn)return 0;return Math.max(0,Math.min(1,(v-mn)/(mx-mn)));};
+}
+function hcell(txt,h,cls){return '<td class="heat'+(cls?' '+cls:'')+'" style="--h:'+h.toFixed(2)+'">'+txt+'</td>';}
+
+function formStats(data,scoreFn,model){
+  var byF=groupByForm(data);
+  return Object.keys(byF).map(function(f){
+    var fs=calc(byF[f]);
+    var raw=calcSwingRaw(byF[f]);
+    var pred=model&&raw?predictRBI(model,raw.timing,raw.iso,raw.nongoro):null;
+    var residual=pred!==null?fs.rbiRate-pred:null;
+    return{form:f,s:fs,score:scoreFn(fs),pred:pred,residual:residual};
+  });
+}
+
+/* ============================================================
+   ヘッダー
+   ============================================================ */
+function renderHeader(){
+  var forms=Object.keys(groupByForm(ABS)).length;
+  var games=ABS.filter(function(a){return a.paNum===1;}).length;
+  $('hdr-kpi').innerHTML='<span><b>'+ABS.length+'</b>打席</span><span><b>'+games+'</b>ゲーム</span><span><b>'+forms+'</b>フォーム</span>';
+}
+
+/* ============================================================
+   打席入力
+   ============================================================ */
+function selR(btn,val,isOut){
+  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
+  btn.classList.add('sel');rV=val;rO=isOut;
+  var bw=document.getElementById('base-btns');
+  bw.style.opacity=isOut?'0.3':'1';bw.style.pointerEvents=isOut?'none':'';
+}
+function selB(btn,n){document.querySelectorAll('.bb').forEach(function(b){b.classList.remove('sel');});btn.classList.add('sel');rB=n;}
+function setBN(n){document.querySelectorAll('.bb').forEach(function(b,i){b.classList.toggle('sel',i===n-1);});rB=n;}
+function renderChips(){
+  var el=document.getElementById('saved-forms'),cur=document.getElementById('form-name').value.trim();
+  el.innerHTML=FMS.map(function(f){
+    return '<button type="button" class="chip'+(f===cur?' sel':'')+'" data-f="'+esc(f)+'" onclick="pickF(this.dataset.f)">'+esc(f)+'</button>';
+  }).join('');
+}
+function pickF(n){document.getElementById('form-name').value=n;renderChips();}
+function clearFN(){document.getElementById('form-name').value='';renderChips();}
+function clearR(){
+  rV='';rO=false;rB=1;pitchCount=3;
+  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
+  setBN(1);
+  document.getElementById('base-btns').style.opacity='1';document.getElementById('base-btns').style.pointerEvents='';
+  document.getElementById('pitch-disp').textContent='3';
+}
+function changePitch(d){pitchCount=Math.max(1,Math.min(15,pitchCount+d));document.getElementById('pitch-disp').textContent=pitchCount;}
+function changeEP(d){epc=Math.max(1,Math.min(15,epc+d));document.getElementById('e-pitch-disp').textContent=epc;}
+
+function addAB(){
+  var fn=document.getElementById('form-name').value.trim()||'（未設定）';
+  var inn=document.getElementById('inning').value;
+  var pan=parseInt(document.getElementById('pa-num').value)||1;
+  if(!rV){alert('打席結果を選択してください');return;}
+  var bases=rO?0:(rV==='四球'?0:rB);
+  var isOut=rO,isBB=rV==='四球';
+  var simR=getCurrentRunners(inn,pan);
+  var rbi=0;
+  if(!isOut){var res2=simAdvance(simR,bases,isBB);rbi=res2.rbi;}
+  ABS.push({id:Date.now(),form:fn,inning:inn,result:rV,pitches:pitchCount,paNum:pan,bases:bases,rbi:rbi,
+    isOut:isOut,isOnBase:!isOut,isGoro:rV.indexOf('ゴロ')===0,isLiner:rV.indexOf('ライナー')===0,
+    isHit:!isOut&&!isBB,isBB:isBB});
+  saveA();
+  if(fn!=='（未設定）'&&FMS.indexOf(fn)<0){FMS.push(fn);saveF();}
+  document.getElementById('pa-num').value=pan+1;
+  clearR();
+  refreshAfterChange();
+}
+
+// 現在のゲーム状況（累計球数・走者）
+function renderGameStatus(){
+  var el=$('game-status');if(!el)return;
+  var sorted=ABS.slice().sort(function(a,b){return a.id-b.id;});
+  var cum=0,pa=0,games=0;
+  sorted.forEach(function(a){if(a.paNum===1){cum=0;pa=0;games++;}cum+=a.pitches;pa++;});
+  var nextPa=parseInt($('pa-num').value)||1;
+  var isNew=nextPa===1||!sorted.length;
+  var c=isNew?0:cum;
+  var r=getCurrentRunners($('inning').value,nextPa);
+  var title=isNew?'新しいゲーム（第'+(games+1)+'試合）':'第'+games+'試合 · '+pa+'打席消化';
+  var after=c>=THRESHOLD;
+  var sub=after?'累計 <b>'+c+'</b>球 → 次の打席は <b>36球以後</b>（投手疲労）':'累計 <b>'+c+'</b>球 → 36球まであと <b>'+(THRESHOLD-c)+'</b>球';
+  var names=['一','二','三'],on=[];r.forEach(function(x,i){if(x)on.push(names[i]);});
+  var runnerTxt=on.length?(on.length===3?'満塁':on.join('・')+'塁'):'走者なし';
+  var svg='<svg width="46" height="46" viewBox="0 0 46 46" aria-label="走者: '+runnerTxt+'">'+
+    '<rect class="base'+(r[1]?' on':'')+'" x="17" y="4" width="12" height="12" transform="rotate(45 23 10)"/>'+
+    '<rect class="base'+(r[2]?' on':'')+'" x="3" y="18" width="12" height="12" transform="rotate(45 9 24)"/>'+
+    '<rect class="base'+(r[0]?' on':'')+'" x="31" y="18" width="12" height="12" transform="rotate(45 37 24)"/>'+
+    '<rect class="base home" x="18" y="33" width="10" height="10" transform="rotate(45 23 38)"/></svg>';
+  el.innerHTML='<div class="gstat">'+svg+'<div class="gstat-body"><div class="gstat-t">'+title+' · '+runnerTxt+'</div>'+
+    '<div class="gstat-s">'+sub+'</div><div class="pbar'+(after?' over':'')+'"><i style="width:'+Math.min(100,c/THRESHOLD*100)+'%"></i></div></div></div>';
+}
+
+function mkB(a){
+  var isHR=a.bases===4&&!a.isOut;
+  var cls=isHR?'bhr':a.isBB?'bbb':a.isOut?'bo':'bh';
+  var nm=['','一','二','三','本'];
+  var lbl=(a.bases>=2&&!a.isOut&&!a.isBB)?a.result+'('+nm[a.bases]+'打)':a.result;
+  return '<span class="badge '+cls+'">'+lbl+'</span>';
+}
+function renderRecent(){
+  var el=document.getElementById('recent-log'),r=ABS.slice().reverse().slice(0,5);
+  if(!r.length){el.innerHTML='<p class="empty">まだデータがありません</p>';return;}
+  el.innerHTML=wrapTable('<table class="ltab"><thead><tr><th>回</th><th class="l">フォーム</th><th class="l">結果</th><th>球</th><th>打点</th></tr></thead><tbody>'+
+    r.map(function(a){return '<tr><td>'+a.inning+'</td><td class="l form-cell">'+esc(a.form)+'</td><td class="l">'+mkB(a)+'</td><td>'+a.pitches+'</td><td>'+(a.rbi||0)+'</td></tr>';}).join('')+'</tbody></table>');
+}
+
+/* ============================================================
+   成績一覧
+   ============================================================ */
+function regressionNoteHtml(model){
+  if(!model){
+    return '<div class="note note-reg">⚠ 重回帰分析には打席数3以上のフォームが5つ以上必要です。データが増えると自動的に計算されます。</div>';
+  }
+  var c=model.coeffs;
+  var mx=Math.max(Math.abs(c[1]),Math.abs(c[2]),Math.abs(c[3]))||1;
+  function bar(v,l){return '<span>'+l+'</span><span class="bar"><i class="'+(v<0?'neg':'')+'" style="width:'+(Math.abs(v)/mx*100).toFixed(0)+'%"></i></span><b>'+v.toFixed(4)+'</b>';}
+  return '<div class="note note-reg">'+
+    '<div class="note-t">📈 重回帰分析モデル <span class="sub">対象'+model.nForms+'フォーム · 決定係数 R²='+model.r2.toFixed(3)+'</span></div>'+
+    '<div class="formula">予測打点率 = '+c[0].toFixed(4)+' + '+c[1].toFixed(4)+'×z(①タイミング) + '+c[2].toFixed(4)+'×z(②スピード) + '+c[3].toFixed(4)+'×z(③アングル)</div>'+
+    '<div class="coef">'+bar(c[1],'①タイミング')+bar(c[2],'②スピード')+bar(c[3],'③アングル')+'</div>'+
+    '<div class="sub">z(...)は各指標を偏差値化（平均50・標準偏差10）した値。係数（棒）が大きいほど打点率への影響が強い。</div>'+
+    '</div>';
+}
+
+function renderPeriodSummary(){
+  var el=$('period-summary');
+  if(!ABS.length){el.innerHTML='<p class="empty">データなし</p>';return;}
+  var rows=['all','before36','after36'].map(function(p){return{p:p,P:PERIODS[p],s:calc(PERIODS[p].data())};});
+  el.innerHTML=wrapTable('<table class="ltab"><thead><tr><th>区分</th><th>打席</th><th>ゲーム</th><th>打率</th><th>出塁率</th><th>長打率</th><th>打点率</th><th>平均球数</th><th>非ゴロ率</th><th>スコア</th></tr></thead><tbody>'+
+    rows.map(function(r){
+      var s=r.s,cur=r.p===UI.statsPeriod?' cur':'';
+      if(!s)return '<tr class="pick'+cur+'" onclick="setStatsPeriod(\''+r.p+'\')"><td>'+r.P.label+'</td><td colspan="9" class="c hint">データなし</td></tr>';
+      return '<tr class="pick'+cur+'" onclick="setStatsPeriod(\''+r.p+'\')"><td>'+r.P.label+'</td><td>'+s.n+'</td><td>'+(r.p==='after36'?'—':s.games)+'</td><td>'+fmt(s.avg)+'</td><td>'+fmt(s.obp)+'</td><td>'+fmt(s.slg)+'</td><td>'+fmt(s.rbiRate)+'</td><td>'+s.avgP.toFixed(1)+'</td><td>'+fmt(s.nonGoroRate)+'</td><td class="num-strong">'+r.P.score(s).toFixed(1)+'</td></tr>';
+    }).join('')+'</tbody></table>');
+}
+
+var FCOL={
+  form:function(r){return r.form;},n:function(r){return r.s.n;},games:function(r){return r.s.games;},
+  avg:function(r){return r.s.avg;},obp:function(r){return r.s.obp;},slg:function(r){return r.s.slg;},
+  rbiRate:function(r){return r.s.rbiRate;},avgP:function(r){return r.s.avgP;},nonGoroRate:function(r){return r.s.nonGoroRate;},
+  score:function(r){return r.score;},pred:function(r){return r.pred;},residual:function(r){return r.residual;}
+};
+function sortRows(rows,key,dir){
+  var g=FCOL[key];
+  return rows.slice().sort(function(a,b){
+    var av=g(a),bv=g(b);
+    if(av===null&&bv===null)return 0;if(av===null)return 1;if(bv===null)return -1;
+    if(typeof av==='string')return av.localeCompare(bv,'ja')*(dir===-1?1:-1);
+    return (bv-av)*(dir===-1?1:-1);
+  });
+}
+function sortForm(key){
+  if(UI.formSort.key===key)UI.formSort.dir*=-1;else UI.formSort={key:key,dir:-1};
+  renderFormTable();
+}
+function renderFormTable(){
+  var P=PERIODS[UI.statsPeriod];
+  var rows=formStats(P.data(),P.score,REG_MODEL);
+  var el=$('form-table');
+  if(!rows.length){el.innerHTML='<div class="score-note">'+P.note+'</div><p class="empty">データなし</p>';return;}
+  var topForm=sortRows(rows,'score',-1)[0].form;
+  var sorted=sortRows(rows,UI.formSort.key,UI.formSort.dir);
+  var nOf=function(r){return r.s.n;};
+  var H={};['avg','obp','slg','rbiRate','avgP','nonGoroRate','score','pred'].forEach(function(k){H[k]=heatFn(rows,FCOL[k],nOf);});
+  function th(key,label){var on=UI.formSort.key===key;return '<th class="sortable'+(on?' sorted':'')+'" onclick="sortForm(\''+key+'\')">'+label+(on?(UI.formSort.dir===-1?' ▼':' ▲'):'')+'</th>';}
+  var body=sorted.map(function(r){
+    var s=r.s,small=s.n<UI.SMALL_N,top=r.form===topForm;
+    return '<tr class="'+(top?'top':'')+(small?' small':'')+'"><td class="form-cell">'+(top?'🥇 ':'')+esc(r.form)+(small?'<span class="tag">参考</span>':'')+'</td>'+
+      '<td>'+s.n+'</td><td>'+(UI.statsPeriod==='after36'?'—':s.games)+'</td>'+
+      hcell(fmt(s.avg),H.avg(s.avg))+hcell(fmt(s.obp),H.obp(s.obp))+hcell(fmt(s.slg),H.slg(s.slg))+hcell(fmt(s.rbiRate),H.rbiRate(s.rbiRate))+
+      hcell(s.avgP.toFixed(1),H.avgP(s.avgP))+hcell(fmt(s.nonGoroRate),H.nonGoroRate(s.nonGoroRate))+
+      hcell(r.score.toFixed(1),H.score(r.score),'num-strong')+
+      (r.pred!==null?hcell(fmt(r.pred),H.pred(r.pred)):'<td>—</td>')+resCell(r.residual)+'</tr>';
+  }).join('');
+  el.innerHTML='<div class="score-note">'+P.note+'</div>'+wrapTable('<table class="ltab"><thead><tr>'+
+    th('form','フォーム')+th('n','打席')+th('games','ゲーム')+th('avg','打率')+th('obp','出塁率')+th('slg','長打率')+th('rbiRate','打点率')+
+    th('avgP','平均<br>球数')+th('nonGoroRate','非ゴロ率')+th('score','スコア')+th('pred','新スコア<br><span class="hint">予測打点率</span>')+th('residual','乖離')+
+    '</tr></thead><tbody>'+body+'</tbody></table>')+
+    '<div class="tbl-foot"><span>色が濃いほど上位 · 見出しタップで並び替え · 打席数'+UI.SMALL_N+'未満は「参考」</span></div>';
+}
+
+function setStatsPeriod(p){UI.statsPeriod=p;setSeg('stats-period',p);renderPeriodSummary();renderFormTable();}
+
+function renderLog(){
+  var el=$('full-log'),sel=$('log-form');
+  var byF=groupByForm(ABS);
+  var forms=Object.keys(byF).sort(function(a,b){return byF[b].length-byF[a].length;});
+  if(UI.logForm&&!byF[UI.logForm])UI.logForm='';
+  sel.innerHTML='<option value="">すべてのフォーム</option>'+forms.map(function(f){return '<option value="'+esc(f)+'">'+esc(f)+'（'+byF[f].length+'）</option>';}).join('');
+  sel.value=UI.logForm;
+  if(!ABS.length){el.innerHTML='<p class="empty">データなし</p>';return;}
+  var list=[];
+  for(var i=ABS.length-1;i>=0;i--){var a=ABS[i];if(!UI.logForm||a.form===UI.logForm)list.push({a:a,no:i+1});}
+  var shown=list.slice(0,UI.logLimit);
+  var rows=shown.map(function(x){
+    var a=x.a;
+    var paDisp=a.paNum===1?'<span class="pa-highlight">'+a.paNum+'</span>':a.paNum;
+    return '<tr><td class="rank">'+x.no+'</td><td>'+a.inning+'</td><td class="l form-cell">'+esc(a.form)+'</td><td class="l">'+mkB(a)+'</td>'+
+      '<td>'+paDisp+'</td><td>'+a.pitches+'球</td><td>'+(a.rbi||0)+'</td>'+
+      '<td><button type="button" class="mini" onclick="window.WII_EDIT('+a.id+')">編集</button><button type="button" class="mini del" onclick="window.WII_DEL('+a.id+')">削除</button></td></tr>';
+  }).join('');
+  el.innerHTML=wrapTable('<table class="ltab"><thead><tr><th>#</th><th>回</th><th class="l">フォーム</th><th class="l">結果</th><th>通算</th><th>球</th><th>打点</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>')+
+    '<div class="tbl-foot"><span>'+list.length+'件中 '+shown.length+'件を表示</span>'+
+    (list.length>shown.length?'<button type="button" class="btn" onclick="moreLog()">さらに30件表示</button>':'')+'</div>';
+}
+function moreLog(){UI.logLimit+=30;renderLog();}
+function setLogForm(v){UI.logForm=v;UI.logLimit=30;renderLog();}
+
 function renderStats(){
   REG_MODEL=computeRegressionModel();
   document.getElementById('reg-note-stats').innerHTML=regressionNoteHtml(REG_MODEL);
-
-  var sA=calc(ABS),s36=calc(get36before()),sA36=calc(get36after());
-  if(sA){document.getElementById('ost-all').innerHTML=statsCards(sA,calcScoreAll);document.getElementById('fst-all').innerHTML=formTable(ABS,calcScoreAll,noteAll,REG_MODEL);}
-  if(s36){document.getElementById('ost-36').innerHTML=statsCards(s36,calcScoreBefore36);document.getElementById('fst-36').innerHTML=formTable(get36before(),calcScoreBefore36,noteBefore,REG_MODEL);}
-  if(sA36){document.getElementById('ost-a36').innerHTML=statsCards(sA36,calcScoreAfter36);document.getElementById('fst-a36').innerHTML=formTable(get36after(),calcScoreAfter36,noteAfter,REG_MODEL);}
-  if(!ABS.length){document.getElementById('full-log').innerHTML='<p class="empty">データなし</p>';return;}
-  var rows='';
-  var rev=ABS.slice().reverse();
-  for(var i=0;i<rev.length;i++){
-    var a=rev[i];
-    var paDisp = a.paNum===1 ? '<span class="pa-highlight">'+a.paNum+'</span>' : a.paNum;
-    rows+='<tr>'+
-      '<td style="color:#bbb">'+(ABS.length-i)+'</td>'+
-      '<td style="font-size:10px;">'+a.inning+'</td>'+
-      '<td style="font-size:10px;max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+a.form+'</td>'+
-      '<td>'+mkB(a)+'</td>'+
-      '<td>'+paDisp+'</td>'+
-      '<td>'+a.pitches+'球</td><td>'+(a.rbi||0)+'</td>'+
-      '<td style="white-space:nowrap;">'+
-        '<button style="padding:2px 6px;font-size:10px;border:1px solid #b3d0f7;border-radius:4px;background:#eef5ff;color:#1a5aad;cursor:pointer;margin-right:2px;" onclick="window.WII_EDIT('+a.id+')">編</button>'+
-        '<button style="padding:2px 6px;font-size:10px;border:1px solid #f5c0c0;border-radius:4px;background:#fff5f5;color:#b01a1a;cursor:pointer;" onclick="window.WII_DEL('+a.id+')">削</button>'+
-      '</td></tr>';
-  }
-  document.getElementById('full-log').innerHTML=
-    '<table class="ltab"><thead><tr><th>#</th><th>回</th><th>フォーム</th><th>結果</th><th>通算</th><th>球</th><th>打点</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+  setSeg('stats-period',UI.statsPeriod);
+  renderPeriodSummary();
+  renderFormTable();
+  renderLog();
 }
 
+/* ============================================================
+   フォーム比較
+   ============================================================ */
+var METRICS={
+  score:{label:'スコア',get:function(r){return r.score;},f:function(v){return v.toFixed(1);}},
+  obp:{label:'出塁率',get:function(r){return r.s.obp;},f:fmt},
+  slg:{label:'長打率',get:function(r){return r.s.slg;},f:fmt},
+  nonGoroRate:{label:'非ゴロ率',get:function(r){return r.s.nonGoroRate;},f:fmt},
+  avgP:{label:'平均球数',get:function(r){return r.s.avgP;},f:function(v){return v.toFixed(1);}},
+  rbiRate:{label:'打点率',get:function(r){return r.s.rbiRate;},f:fmt},
+  avg:{label:'打率',get:function(r){return r.s.avg;},f:fmt}
+};
+function setCmpPeriod(p){UI.cmpPeriod=p;renderCompare();}
+function setCmpMetric(m){UI.cmpMetric=m;renderCompare();}
+
+// 棒の右端に値を書くプラグイン（グラフごとに作る）
+function valueLabelPlugin(texts){
+  return{id:'valueLabels',afterDatasetsDraw:function(chart){
+    var c=chart.ctx,meta=chart.getDatasetMeta(0);
+    c.save();c.font='600 11px -apple-system,system-ui,sans-serif';c.fillStyle=cssVar('--muted');c.textBaseline='middle';
+    meta.data.forEach(function(bar,i){c.fillText(texts[i],bar.x+5,bar.y);});c.restore();
+  }};
+}
+
+function renderCompare(){
+  setSeg('cmp-period',UI.cmpPeriod);setSeg('cmp-metric',UI.cmpMetric);
+  var P=PERIODS[UI.cmpPeriod],M=METRICS[UI.cmpMetric];
+  $('cmp-desc').textContent=P.desc;
+  var rows=formStats(P.data(),P.score,null).filter(function(r){return r.s.n>=2;});
+  var rEl=$('form-ranking'),wrap=$('cmp-wrap');
+  if(CMP_CHART){CMP_CHART.destroy();CMP_CHART=null;}
+  if(!rows.length){
+    wrap.style.display='none';
+    rEl.innerHTML='<p class="empty">2打席以上のフォームがありません</p>';
+    return;
+  }
+  wrap.style.display='';
+  var byM=rows.slice().sort(function(a,b){return M.get(b)-M.get(a);});
+  wrap.style.height=Math.max(180,byM.length*30+40)+'px';
+  var vals=byM.map(M.get);
+  CMP_CHART=new Chart($('cmpChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:byM.map(function(r){return r.form;}),datasets:[{label:M.label,data:vals,
+      backgroundColor:byM.map(function(r,i){return i===0?cssVar('--accent'):r.s.n<UI.SMALL_N?accentA(.18):accentA(.5);}),
+      borderRadius:5,barPercentage:.78,categoryPercentage:.9}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:{duration:250},
+      layout:{padding:{right:44}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){var r=byM[ctx.dataIndex];return M.label+': '+M.f(ctx.raw)+'（'+r.s.n+'打席）';}}}},
+      scales:{x:{beginAtZero:true,grid:{color:cssVar('--border')},border:{display:false},ticks:{color:cssVar('--faint'),font:{size:10},callback:function(v){return UI.cmpMetric==='score'||UI.cmpMetric==='avgP'?v:fmt(v);}}},
+              y:{grid:{display:false},border:{display:false},ticks:{color:cssVar('--text'),font:{size:12,weight:'600'}}}}},
+    plugins:[valueLabelPlugin(vals.map(M.f))]
+  });
+
+  var scored=rows.slice().sort(function(a,b){return b.score-a.score;});
+  var nOf=function(r){return r.s.n;};
+  var H={};['score','obp','slg','avgP','nonGoroRate','rbiRate'].forEach(function(k){H[k]=heatFn(rows,FCOL[k],nOf);});
+  rEl.innerHTML='<div class="score-note">'+P.note+'</div>'+wrapTable('<table class="ltab"><thead><tr><th>フォーム</th><th>順位</th><th>打席</th><th>ゲーム</th><th>スコア</th><th>出塁率</th><th>長打率</th><th>平均球数</th><th>非ゴロ率</th><th>打点率</th></tr></thead><tbody>'+
+    scored.map(function(r,i){
+      var s=r.s,small=s.n<UI.SMALL_N;
+      return '<tr class="'+(i===0?'top':'')+(small?' small':'')+'"><td class="form-cell">'+(i===0?'🥇 ':'')+esc(r.form)+(small?'<span class="tag">参考</span>':'')+'</td>'+
+        '<td class="rank">'+(i+1)+'</td><td>'+s.n+'</td><td>'+(UI.cmpPeriod==='after36'?'—':s.games)+'</td>'+
+        hcell(r.score.toFixed(1),H.score(r.score),'num-strong')+hcell(fmt(s.obp),H.obp(s.obp))+hcell(fmt(s.slg),H.slg(s.slg))+
+        hcell(s.avgP.toFixed(1),H.avgP(s.avgP))+hcell(fmt(s.nonGoroRate),H.nonGoroRate(s.nonGoroRate))+hcell(fmt(s.rbiRate),H.rbiRate(s.rbiRate))+'</tr>';
+    }).join('')+'</tbody></table>');
+}
+
+/* ============================================================
+   スイング理論
+   ============================================================ */
+// 点の横にフォーム名を書く。重なる名前は省略（優先度の高い順に配置。省略分はタップで確認）
+function pointLabelPlugin(texts,priority){
+  return{id:'pointLabels',afterDatasetsDraw:function(chart){
+    var c=chart.ctx,meta=chart.getDatasetMeta(1),area=chart.chartArea,placed=[];
+    c.save();c.font='11px -apple-system,system-ui,sans-serif';c.fillStyle=cssVar('--muted');c.textBaseline='middle';
+    var order=texts.map(function(_,i){return i;}).sort(function(a,b){return priority[b]-priority[a];});
+    // 点そのものも障害物として登録
+    meta.data.forEach(function(pt){placed.push({x1:pt.x-5,x2:pt.x+5,y1:pt.y-5,y2:pt.y+5});});
+    order.forEach(function(i){
+      var pt=meta.data[i];if(!pt)return;
+      var t=texts[i],w=c.measureText(t).width,h=13;
+      var cands=[[pt.x+8,pt.y],[pt.x-8-w,pt.y],[pt.x-w/2,pt.y-13],[pt.x-w/2,pt.y+13]];
+      for(var k=0;k<cands.length;k++){
+        var x=cands[k][0],y=cands[k][1];
+        var r={x1:x-1,x2:x+w+1,y1:y-h/2,y2:y+h/2};
+        if(r.x1<area.left||r.x2>area.right||r.y1<area.top||r.y2>area.bottom)continue;
+        var self={x1:pt.x-5,x2:pt.x+5,y1:pt.y-5,y2:pt.y+5};
+        var others=placed.filter(function(p){return !(p.x1===self.x1&&p.y1===self.y1);});
+        if(others.some(function(p){return r.x1<p.x2&&r.x2>p.x1&&r.y1<p.y2&&r.y2>p.y1;}))continue;
+        c.fillText(t,x,y);placed.push(r);break;
+      }
+    });c.restore();
+  }};
+}
+
+function renderSwing(){
+  REG_MODEL=computeRegressionModel();
+  document.getElementById('reg-note-swing').innerHTML=regressionNoteHtml(REG_MODEL);
+
+  var byF=groupByForm(ABS);
+  var forms=Object.keys(byF).map(function(f){
+    var raw=calcSwingRaw(byF[f]);
+    if(!raw)return null;
+    var pred=REG_MODEL?predictRBI(REG_MODEL,raw.timing,raw.iso,raw.nongoro):null;
+    var residual=pred!==null?raw.rbiRate-pred:null;
+    return{form:f,raw:raw,pred:pred,residual:residual};
+  }).filter(function(item){return item && item.raw.n>=3;});
+
+  forms.sort(function(a,b){
+    var av = swingSortKey==='pred'?(a.pred||-999) : swingSortKey==='residual'?(a.residual||-999) : a.raw[swingSortKey];
+    var bv = swingSortKey==='pred'?(b.pred||-999) : swingSortKey==='residual'?(b.residual||-999) : b.raw[swingSortKey];
+    return (bv-av)*swingSortDir*-1;
+  });
+
+  // 散布図（予測 vs 実際）
+  if(SWING_CHART){SWING_CHART.destroy();SWING_CHART=null;}
+  var withPred=forms.filter(function(f){return f.pred!==null;});
+  $('swing-chart-card').style.display=withPred.length?'':'none';
+  if(withPred.length){
+    var xs=withPred.map(function(f){return f.pred;}),ys=withPred.map(function(f){return f.raw.rbiRate;});
+    var lo=Math.min.apply(null,xs.concat(ys)),hi=Math.max.apply(null,xs.concat(ys));
+    var pad=(hi-lo)*0.08||0.05;lo=Math.max(0,Math.floor((lo-pad)*20)/20);hi=Math.ceil((hi+pad)*20)/20;
+    SWING_CHART=new Chart($('swingChart').getContext('2d'),{
+      type:'scatter',
+      data:{datasets:[
+        {type:'line',data:[{x:lo,y:lo},{x:hi,y:hi}],borderColor:cssVar('--faint'),borderDash:[5,4],borderWidth:1,pointRadius:0,pointHitRadius:0},
+        {data:withPred.map(function(f){return{x:f.pred,y:f.raw.rbiRate};}),
+         backgroundColor:withPred.map(function(f){return f.residual>=0?cssVar('--good'):cssVar('--bad');}),
+         pointRadius:withPred.map(function(f){return Math.max(4,Math.min(9,Math.sqrt(f.raw.n)));}),pointHoverRadius:9}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:250},
+        plugins:{legend:{display:false},tooltip:{filter:function(i){return i.datasetIndex===1;},callbacks:{label:function(ctx){var f=withPred[ctx.dataIndex];return f.form+'：実際'+fmt(f.raw.rbiRate)+' / 予測'+fmt(f.pred)+'（乖離'+sgn(f.residual)+'・'+f.raw.n+'打席）';}}}},
+        scales:{x:{min:lo,max:hi,title:{display:true,text:'予測打点率（新スコア）',color:cssVar('--muted')},grid:{color:cssVar('--border')},ticks:{color:cssVar('--faint'),callback:function(v){return fmt(v);}}},
+                y:{min:lo,max:hi,title:{display:true,text:'実際の打点率',color:cssVar('--muted')},grid:{color:cssVar('--border')},ticks:{color:cssVar('--faint'),callback:function(v){return fmt(v);}}}}},
+      plugins:[pointLabelPlugin(withPred.map(function(f){return f.form;}),withPred.map(function(f){return Math.abs(f.residual);}))]
+    });
+  }
+
+  var arrow=function(key){return swingSortKey===key ? (swingSortDir===-1?' ▼':' ▲') : '';};
+  var cls=function(key){return 'sortable'+(swingSortKey===key?' sorted':'');};
+  var nOf=function(r){return r.raw.n;};
+  var H={
+    timing:heatFn(forms,function(r){return r.raw.timing;},nOf),iso:heatFn(forms,function(r){return r.raw.iso;},nOf),
+    nongoro:heatFn(forms,function(r){return r.raw.nongoro;},nOf),rbi:heatFn(forms,function(r){return r.raw.rbiRate;},nOf),
+    pred:heatFn(forms,function(r){return r.pred;},nOf)
+  };
+
+  var rows=forms.map(function(item){
+    var f=item.form, raw=item.raw, small=raw.n<UI.SMALL_N;
+    return '<tr class="'+(small?'small':'')+'">'+
+      '<td class="form-cell">'+esc(f)+(small?'<span class="tag">参考</span>':'')+'</td>'+
+      '<td>'+raw.n+'</td>'+
+      hcell(raw.timing.toFixed(3),H.timing(raw.timing))+
+      hcell(fmt(raw.iso),H.iso(raw.iso))+
+      hcell(fmt(raw.nongoro),H.nongoro(raw.nongoro))+
+      hcell(fmt(raw.rbiRate),H.rbi(raw.rbiRate))+
+      (item.pred!==null?hcell(fmt(item.pred),H.pred(item.pred),'num-strong'):'<td>—</td>')+
+      resCell(item.residual)+
+      '</tr>';
+  }).join('');
+
+  document.getElementById('swing-table').innerHTML=wrapTable(
+    '<table class="ltab"><thead><tr>'+
+    '<th>フォーム</th><th>打席</th>'+
+    '<th class="'+cls('timing')+'" onclick="sortSwing(\'timing\')">①タイミング'+arrow('timing')+'</th>'+
+    '<th class="'+cls('iso')+'" onclick="sortSwing(\'iso\')">②スピード'+arrow('iso')+'</th>'+
+    '<th class="'+cls('nongoro')+'" onclick="sortSwing(\'nongoro\')">③アングル'+arrow('nongoro')+'</th>'+
+    '<th>実際の<br>打点率</th>'+
+    '<th class="'+cls('pred')+'" onclick="sortSwing(\'pred\')">④新スコア<br><span class="hint">予測打点率</span>'+arrow('pred')+'</th>'+
+    '<th class="'+cls('residual')+'" onclick="sortSwing(\'residual\')">乖離<br><span class="hint">実際−予測</span>'+arrow('residual')+'</th>'+
+    '</tr></thead><tbody>'+
+    (rows||'<tr><td colspan="8" class="c hint">3打席以上のフォームがありません</td></tr>')+
+    '</tbody></table>')+
+    '<div class="tbl-foot"><span>💡乖離がプラスのフォームは実力以上の結果、マイナスは「タイミング・スピード・アングルは優秀だが結果が出ていない＝不運だがポテンシャルが高い」フォームです。</span></div>';
+}
+
+window.sortSwing=function(key){
+  if(swingSortKey===key){swingSortDir=swingSortDir===-1?1:-1;}
+  else{swingSortKey=key;swingSortDir=-1;}
+  renderSwing();
+};
+
+/* ============================================================
+   編集・削除
+   ============================================================ */
 window.WII_DEL=function(id){
   var numId=parseInt(id,10);
   if(!window.confirm('削除しますか？'))return;
   ABS=ABS.filter(function(x){return x.id!==numId;});
   ABS=recalcRBI(ABS);
-  saveA();renderRecent();renderStats();
-  if(document.getElementById('tab-swing').classList.contains('active'))renderSwing();
-  if(document.getElementById('tab-compare').classList.contains('active'))renderCompare('all');
-  if(document.getElementById('tab-compare36').classList.contains('active'))renderCompare('before36');
-  if(document.getElementById('tab-compareAfter36').classList.contains('active'))renderCompare('after36');
+  saveA();refreshAfterChange();
 };
 window.WII_EDIT=function(id){
   var numId=parseInt(id,10);
@@ -461,70 +680,7 @@ function saveEdit(){
     isHit:!isOut&&!isBB,isBB:isBB
   });
   ABS=recalcRBI(ABS);
-  saveA();closeModal();renderRecent();renderStats();
-  if(document.getElementById('tab-swing').classList.contains('active'))renderSwing();
-  if(document.getElementById('tab-compare').classList.contains('active'))renderCompare('all');
-  if(document.getElementById('tab-compare36').classList.contains('active'))renderCompare('before36');
-  if(document.getElementById('tab-compareAfter36').classList.contains('active'))renderCompare('after36');
-}
-
-function renderCompare(mode){
-  var data,cid,rid,scoreFn,noteHtml;
-  if(mode==='before36'){data=get36before();cid='cmpChart36';rid='form-ranking36';scoreFn=calcScoreBefore36;noteHtml=noteBefore;}
-  else if(mode==='after36'){data=get36after();cid='cmpChartA36';rid='form-rankingA36';scoreFn=calcScoreAfter36;noteHtml=noteAfter;}
-  else{data=ABS;cid='cmpChart';rid='form-ranking';scoreFn=calcScoreAll;noteHtml=noteAll;}
-  var old=mode==='before36'?CH36:(mode==='after36'?CHA36:CH);
-  var byF={};
-  data.forEach(function(a){if(!byF[a.form])byF[a.form]=[];byF[a.form].push(a);});
-  var fms=Object.keys(byF).filter(function(f){return byF[f].length>=2;});
-  var rEl=document.getElementById(rid);
-  if(!fms.length){
-    rEl.innerHTML='<p class="empty">2打席以上のフォームがありません</p>';
-    if(old)old.destroy();
-    if(mode==='before36')CH36=null;else if(mode==='after36')CHA36=null;else CH=null;
-    return;
-  }
-  var obpA=fms.map(function(f){return calc(byF[f]).obp;});
-  var pitA=fms.map(function(f){return calc(byF[f]).avgP;});
-  var ngrA=fms.map(function(f){return calc(byF[f]).nonGoroRate;});
-  var slgA=fms.map(function(f){return calc(byF[f]).slg;});
-  if(old)old.destroy();
-  var nc=new Chart(document.getElementById(cid).getContext('2d'),{
-    type:'bar',
-    data:{labels:fms,datasets:[
-      {label:'出塁率',data:obpA,backgroundColor:'#2a78d6',borderRadius:3},
-      {label:'平均球数(÷10)',data:pitA.map(function(v){return v/10;}),backgroundColor:'#1baf7a',borderRadius:3},
-      {label:'非ゴロ率',data:ngrA,backgroundColor:'#e34948',borderRadius:3},
-      {label:'長打率',data:slgA.map(function(v){return Math.min(v,1);}),backgroundColor:'#eda100',borderRadius:3}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
-        if(ctx.datasetIndex===1)return'平均球数: '+(ctx.raw*10).toFixed(1);
-        var f=fms[ctx.dataIndex];
-        if(ctx.datasetIndex===3)return'長打率: '+fmt(calc(byF[f]).slg);
-        return ctx.dataset.label+': '+fmt(ctx.raw);
-      }}}},
-      scales:{x:{grid:{display:false},ticks:{color:'#888',font:{size:9}}},
-              y:{beginAtZero:true,max:1,ticks:{color:'#888',font:{size:9},callback:function(v){return v.toFixed(2);}}}}}
-  });
-  if(mode==='before36')CH36=nc;else if(mode==='after36')CHA36=nc;else CH=nc;
-  var scored=fms.map(function(f,i){
-    var fs=calc(byF[f]);
-    var sc=scoreFn(fs);
-    return{form:f,n:fs.n,games:fs.games,obp:fs.obp,slg:fs.slg,avgP:fs.avgP,ngr:fs.nonGoroRate,rbiRate:fs.rbiRate,score:sc};
-  }).sort(function(a,b){return b.score-a.score;});
-  rEl.innerHTML='<div class="score-note" style="margin-top:8px;">'+noteHtml+'</div>'+
-    '<table class="ltab"><thead><tr><th>順位</th><th>フォーム</th><th>打席</th><th>ゲーム</th><th>スコア</th><th>出塁率</th><th>長打率</th><th>平均球数</th><th>非ゴロ率</th><th>打点率</th></tr></thead><tbody>'+
-    scored.map(function(s,i){
-      return '<tr'+(i===0?' style="background:#f0f0ff;"':'')+'>'+
-        '<td style="color:#bbb">'+(i+1)+'</td>'+
-        '<td style="font-weight:'+(i===0?'700':'500')+';color:'+(i===0?'#4444cc':'#222')+'">'+(i===0?'🥇 ':'')+s.form+'</td>'+
-        '<td style="color:#aaa">'+s.n+'</td>'+
-        '<td style="color:#aaa">'+s.games+'</td>'+
-        '<td style="font-weight:600;color:'+(i===0?'#4444cc':'#333')+'">'+s.score.toFixed(1)+'</td>'+
-        '<td>'+fmt(s.obp)+'</td><td>'+fmt(s.slg)+'</td>'+
-        '<td>'+s.avgP.toFixed(1)+'</td><td>'+fmt(s.ngr)+'</td><td>'+fmt(s.rbiRate)+'</td></tr>';
-    }).join('')+'</tbody></table>';
+  saveA();closeModal();refreshAfterChange();
 }
 
 function doAI(mode){
@@ -544,18 +700,43 @@ function doAI(mode){
   copyText(lines.join('\n')).then(function(){alert('分析用テキストをコピーしました。Claudeなどに貼り付けてください。');});
 }
 
-function switchTab(name){
-  ['entry','stats','swing','compare','compare36','compareAfter36','data'].forEach(function(n,i){
-    document.querySelectorAll('.tab')[i].classList.toggle('active',n===name);
-    document.getElementById('tab-'+n).classList.toggle('active',n===name);
-  });
+/* ============================================================
+   タブ切り替え・再描画
+   ============================================================ */
+var TABS=['entry','stats','compare','swing','data'];
+var CUR_TAB='entry';
+function renderTab(name){
   if(name==='stats')renderStats();
   if(name==='swing')renderSwing();
-  if(name==='compare')renderCompare('all');
-  if(name==='compare36')renderCompare('before36');
-  if(name==='compareAfter36')renderCompare('after36');
+  if(name==='compare')renderCompare();
+  if(name==='data')renderDataInfo();
+}
+function switchTab(name){
+  if(TABS.indexOf(name)<0)name='entry';
+  CUR_TAB=name;
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===name);});
+  TABS.forEach(function(n){document.getElementById('tab-'+n).classList.toggle('active',n===name);});
+  var at=document.querySelector('.tab.active');if(at&&at.scrollIntoView)at.scrollIntoView({block:'nearest',inline:'nearest'});
+  if(location.hash!=='#'+name){try{history.replaceState(null,'','#'+name);}catch(e){}}
+  renderTab(name);
+}
+function refreshAfterChange(){
+  renderHeader();renderRecent();renderChips();renderGameStatus();
+  if(CUR_TAB!=='entry')renderTab(CUR_TAB);
 }
 
+/* ============================================================
+   データ（JSON書き出し・読み込み）
+   ============================================================ */
+function renderDataInfo(){
+  var el=$('data-info');if(!el)return;
+  var last=ABS.reduce(function(m,a){return a.id>m?a.id:m;},0);
+  var lastTxt=last?new Date(last).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+  el.innerHTML='<div class="data-info">'+
+    '<div class="kpi"><div class="n">'+ABS.length+'</div><div class="d">保存中の打席</div></div>'+
+    '<div class="kpi"><div class="n">'+FMS.length+'</div><div class="d">登録フォーム</div></div>'+
+    '<div class="kpi"><div class="n" style="font-size:15px;">'+lastTxt+'</div><div class="d">最終記録</div></div></div>';
+}
 function toast(m){var e=document.getElementById('data-msg');if(e)e.textContent=m;}
 function exportPayload(){return JSON.stringify({version:1,exportedAt:new Date().toISOString(),abs:ABS,forms:FMS},null,1);}
 function exportJSON(){var b=new Blob([exportPayload()],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wii-baseball-data.json';a.click();toast('ダウンロードしました（'+ABS.length+'打席）');}
@@ -563,9 +744,15 @@ function copyText(t){if(navigator.clipboard&&navigator.clipboard.writeText)retur
 function copyJSON(){copyText(exportPayload()).then(function(){toast('コピーしました');});}
 function applyImport(txt){
   try{var d=JSON.parse(txt);var abs=Array.isArray(d)?d:d.abs;if(!Array.isArray(abs))throw 0;
-    ABS=recalcRBI(abs);if(d.forms&&d.forms.length)FMS=d.forms;saveA();saveF();renderRecent();renderChips();toast(ABS.length+'打席を読み込みました');}
+    ABS=recalcRBI(abs);if(d.forms&&d.forms.length)FMS=d.forms;saveA();saveF();refreshAfterChange();toast(ABS.length+'打席を読み込みました');}
   catch(e){toast('読み込めませんでした。JSONの形式を確認してください');}
 }
 function importFromText(){applyImport(document.getElementById('import-text').value);}
 function importFromFile(inp){var f=inp.files[0];if(!f)return;var r=new FileReader();r.onload=function(){applyImport(r.result);};r.readAsText(f);}
-renderRecent();renderChips();
+
+/* ============================================================
+   起動
+   ============================================================ */
+renderHeader();renderRecent();renderChips();renderGameStatus();
+switchTab((location.hash||'').slice(1)||'entry');
+window.addEventListener('hashchange',function(){var h=(location.hash||'').slice(1);if(h&&h!==CUR_TAB)switchTab(h);});
