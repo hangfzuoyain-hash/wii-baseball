@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wii Sports 打撃フォーム分析</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<h1 style="font-size:18px;margin:4px auto 8px;max-width:900px;">Wii Sports 打撃フォーム分析</h1>
+
+<div class="app">
+<div id="restore-banner"></div>
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('entry')">打席入力</div>
+  <div class="tab" onclick="switchTab('stats')">成績一覧</div>
+  <div class="tab" onclick="switchTab('swing')">スイング理論</div>
+  <div class="tab" onclick="switchTab('compare')">フォーム比較(全体)</div>
+  <div class="tab" onclick="switchTab('compare36')">36球以前</div>
+  <div class="tab" onclick="switchTab('compareAfter36')">36球以後</div>
+  <div class="tab" onclick="switchTab('data')">データ</div>
+</div>
+
+<div class="section active" id="tab-entry">
+  <div class="row2">
+    <div><label>回</label>
+      <select id="inning"><option>1回表</option><option>2回表</option><option>3回表</option></select>
+    </div>
+    <div><label>バッティングフォーム</label>
+      <div class="form-input-wrap">
+        <input type="text" id="form-name" placeholder="入力 or 下から選択" oninput="renderChips()"/>
+        <button class="form-clear-btn" onclick="clearFN()">×</button>
+      </div>
+    </div>
+  </div>
+  <div class="chips" id="saved-forms"></div>
+  <hr class="divider">
+  <div style="margin-bottom:.6rem;">
+    <label>通算打席番号（1=ゲーム開始）</label>
+    <input type="number" id="pa-num" min="1" max="30" value="1" style="width:100px;"/>
+  </div>
+  <div class="rgroup">
+    <div class="stitle">安打・出塁</div>
+    <div class="pbgrid">
+      <button class="pb" onclick="selR(this,'四球',false)">四球</button>
+      <button class="pb" onclick="selR(this,'ゴロ安打',false)">ゴロ安打</button>
+      <button class="pb" onclick="selR(this,'ライナー安打',false)">ライナー安打</button>
+      <button class="pb" onclick="selR(this,'フライ安打',false)">フライ安打</button>
+    </div>
+  </div>
+  <div class="rgroup">
+    <div class="stitle">長打（塁打数）</div>
+    <div class="bhint">ヒットのとき何塁打か選んでください</div>
+    <div class="brow" id="base-btns">
+      <button class="bb sel" onclick="selB(this,1)">一塁打</button>
+      <button class="bb" onclick="selB(this,2)">二塁打</button>
+      <button class="bb" onclick="selB(this,3)">三塁打</button>
+      <button class="bb" onclick="selB(this,4)">本塁打</button>
+    </div>
+  </div>
+  <div class="rgroup">
+    <div class="stitle">アウト</div>
+    <div class="pbgrid">
+      <button class="pb" onclick="selR(this,'ゴロアウト',true)">ゴロアウト</button>
+      <button class="pb" onclick="selR(this,'ライナーアウト',true)">ライナーアウト</button>
+      <button class="pb" onclick="selR(this,'フライアウト',true)">フライアウト</button>
+      <button class="pb" onclick="selR(this,'三振',true)">三振</button>
+    </div>
+  </div>
+  <div class="pitch-row">
+    <div style="flex:1;"><div class="stitle">球数</div><div style="font-size:10px;color:#aaa;">投手に投げさせた球数</div></div>
+    <div class="pitch-counter">
+      <button class="pc-btn" onclick="changePitch(-1)">−</button>
+      <div class="pc-num" id="pitch-disp">3</div>
+      <button class="pc-btn" onclick="changePitch(1)">＋</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:4px;">
+    <button class="btn btnp" onclick="addAB()">打席を記録する</button>
+    <button class="btn" onclick="clearR()">結果クリア</button>
+  </div>
+  <hr class="divider">
+  <div class="stitle">直近5打席</div>
+  <div id="recent-log"><p class="empty">まだデータがありません</p></div>
+</div>
+
+<div class="section" id="tab-stats">
+  <div id="reg-note-stats"></div>
+  <div class="stat-section">
+    <div class="stat-section-title">📊 トータル成績</div>
+    <div class="sgrid" id="ost-all"></div>
+    <div id="fst-all"></div>
+  </div>
+  <div class="stat-section">
+    <div class="stat-section-title">⚡ 36球以前の成績</div>
+    <div class="sgrid" id="ost-36"></div>
+    <div id="fst-36"></div>
+  </div>
+  <div class="stat-section">
+    <div class="stat-section-title">🔥 36球以後の成績</div>
+    <div class="sgrid" id="ost-a36"></div>
+    <div id="fst-a36"></div>
+  </div>
+  <hr class="divider">
+  <div class="stitle" style="margin-bottom:5px;">打席ログ <span style="font-weight:400;color:#aaa;">（「通算」列が1の行＝新ゲーム開始）</span></div>
+  <div id="full-log"></div>
+</div>
+
+<div class="section" id="tab-swing">
+  <div class="swing-note">
+    🎯 <strong>スイング理論：3つの仮説を既存データから近似</strong><br>
+    ①タイミング → 「5球以上粘れた率」＋「4球以内で決着したときの安打率」<br>
+    ②スピード → ISO（長打率−打率）<br>
+    ③アングル → 非ゴロ率
+  </div>
+  <div id="reg-note-swing"></div>
+  <div id="swing-table"></div>
+</div>
+
+<div class="section" id="tab-compare">
+  <p style="font-size:11px;color:#777;margin-bottom:5px;">全打席対象。2打席以上のフォームのみ。長打率を最重視。</p>
+  <div class="legend">
+    <span><i style="background:#2a78d6"></i>出塁率</span>
+    <span><i style="background:#1baf7a"></i>平均球数(÷10)</span>
+    <span><i style="background:#e34948"></i>非ゴロ率</span>
+    <span><i style="background:#eda100"></i>長打率</span>
+  </div>
+  <div class="cw"><canvas id="cmpChart"></canvas></div>
+  <div id="form-ranking"></div>
+  <div style="margin-top:.6rem;">
+    <button class="btn" onclick="doAI('all')">↗ AIに総合評価（全打席）</button>
+  </div>
+</div>
+
+<div class="section" id="tab-compare36">
+  <p style="font-size:11px;color:#777;margin-bottom:4px;">ゲーム・回ごとにリセット。累計36球未満の打席のみ。出塁率・球数を重視。</p>
+  <div class="fbadge">⚡ 36球以前フィルター</div>
+  <div class="legend">
+    <span><i style="background:#2a78d6"></i>出塁率</span>
+    <span><i style="background:#1baf7a"></i>平均球数(÷10)</span>
+    <span><i style="background:#e34948"></i>非ゴロ率</span>
+    <span><i style="background:#eda100"></i>長打率</span>
+  </div>
+  <div class="cw"><canvas id="cmpChart36"></canvas></div>
+  <div id="form-ranking36"></div>
+  <div style="margin-top:.6rem;">
+    <button class="btn" onclick="doAI('before36')">↗ AIに総合評価（36球以前）</button>
+  </div>
+</div>
+
+<div class="section" id="tab-compareAfter36">
+  <p style="font-size:11px;color:#777;margin-bottom:4px;">累計36球以後の打席のみ。長打率を圧倒的に重視。</p>
+  <div class="fbadge2">🔥 36球以後フィルター</div>
+  <div class="legend">
+    <span><i style="background:#2a78d6"></i>出塁率</span>
+    <span><i style="background:#1baf7a"></i>平均球数(÷10)</span>
+    <span><i style="background:#e34948"></i>非ゴロ率</span>
+    <span><i style="background:#eda100"></i>長打率</span>
+  </div>
+  <div class="cw"><canvas id="cmpChartA36"></canvas></div>
+  <div id="form-rankingA36"></div>
+  <div style="margin-top:.6rem;">
+    <button class="btn" onclick="doAI('after36')">↗ AIに総合評価（36球以後）</button>
+  </div>
+</div>
+
+<div class="section" id="tab-data">
+  <div class="stitle">データの書き出し・読み込み（JSON）</div>
+  <p style="font-size:12px;color:#666;margin-bottom:8px;">データはこのブラウザのlocalStorageに保存されています。端末やブラウザを変える前に書き出してください。</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+    <button class="btn btnp" onclick="exportJSON()">JSONをダウンロード</button>
+    <button class="btn" onclick="copyJSON()">JSONをコピー</button>
+    <label class="btn" style="margin:0;cursor:pointer;">ファイルから読み込み<input type="file" accept=".json" style="display:none" onchange="importFromFile(this)"></label>
+  </div>
+  <textarea id="import-text" rows="8" style="width:100%;font-size:11px;" placeholder="書き出したJSONをここに貼り付けて「貼り付けから読み込み」"></textarea>
+  <div style="margin-top:6px;"><button class="btn" onclick="importFromText()">貼り付けから読み込み（上書き）</button></div>
+  <div id="data-msg" style="font-size:12px;margin-top:8px;color:#1a7a40;"></div>
+</div>
+<div class="modal-bg" id="edit-modal" style="display:none">
+  <div class="modal">
+    <h3>打席を編集</h3>
+    <div class="mrow"><label>回</label>
+      <select id="e-inning"><option>1回表</option><option>2回表</option><option>3回表</option></select>
+    </div>
+    <div class="mrow"><label>フォーム</label><input type="text" id="e-form"/></div>
+    <div class="mrow"><label>結果</label>
+      <select id="e-result">
+        <option>四球</option><option>ゴロ安打</option><option>ライナー安打</option><option>フライ安打</option>
+        <option>ゴロアウト</option><option>ライナーアウト</option><option>フライアウト</option><option>三振</option>
+      </select>
+    </div>
+    <div class="mrow"><label>塁打数</label>
+      <select id="e-bases">
+        <option value="0">0（アウト/四球）</option><option value="1">一塁打</option>
+        <option value="2">二塁打</option><option value="3">三塁打</option><option value="4">本塁打</option>
+      </select>
+    </div>
+    <div class="mrow"><label>球数</label>
+      <div class="pitch-counter">
+        <button class="pc-btn" onclick="changeEP(-1)">−</button>
+        <div class="pc-num" id="e-pitch-disp">3</div>
+        <button class="pc-btn" onclick="changeEP(1)">＋</button>
+      </div>
+    </div>
+    <div class="mrow"><label>通算打席番号</label><input type="number" id="e-panum" min="1" max="30"/></div>
+    <div class="mfooter">
+      <button class="btn" onclick="closeModal()">キャンセル</button>
+      <button class="btn btnp" onclick="saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="app.js"></script>
+</body></html>
