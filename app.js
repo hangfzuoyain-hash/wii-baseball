@@ -266,10 +266,22 @@ function renderHeader(){
    打席入力
    ============================================================ */
 function selR(btn,val,isOut){
-  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
+  // 四球をもう一度押したら解除
+  if(val==='四球'&&rV==='四球'){resetResultBtns();return;}
+  var isBB=val==='四球';
+  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');b.disabled=isBB&&b!==btn;});
   btn.classList.add('sel');rV=val;rO=isOut;
+  var lock=isOut||isBB;
   var bw=document.getElementById('base-btns');
-  bw.style.opacity=isOut?'0.3':'1';bw.style.pointerEvents=isOut?'none':'';
+  bw.style.opacity=lock?'0.3':'1';bw.style.pointerEvents=lock?'none':'';
+  bw.querySelectorAll('.bb').forEach(function(b){b.disabled=lock;});
+}
+function resetResultBtns(){
+  rV='';rO=false;
+  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');b.disabled=false;});
+  var bw=document.getElementById('base-btns');
+  bw.style.opacity='1';bw.style.pointerEvents='';
+  bw.querySelectorAll('.bb').forEach(function(b){b.disabled=false;});
 }
 function selB(btn,n){document.querySelectorAll('.bb').forEach(function(b){b.classList.remove('sel');});btn.classList.add('sel');rB=n;}
 function setBN(n){document.querySelectorAll('.bb').forEach(function(b,i){b.classList.toggle('sel',i===n-1);});rB=n;}
@@ -282,10 +294,9 @@ function renderChips(){
 function pickF(n){document.getElementById('form-name').value=n;renderChips();}
 function clearFN(){document.getElementById('form-name').value='';renderChips();}
 function clearR(){
-  rV='';rO=false;rB=1;pitchCount=3;
-  document.querySelectorAll('.pb').forEach(function(b){b.classList.remove('sel');});
+  rB=1;pitchCount=3;
+  resetResultBtns();
   setBN(1);
-  document.getElementById('base-btns').style.opacity='1';document.getElementById('base-btns').style.pointerEvents='';
   document.getElementById('pitch-disp').textContent='3';
 }
 function changePitch(d){pitchCount=Math.max(1,Math.min(15,pitchCount+d));document.getElementById('pitch-disp').textContent=pitchCount;}
@@ -307,8 +318,35 @@ function addAB(){
   saveA();
   if(fn!=='（未設定）'&&FMS.indexOf(fn)<0){FMS.push(fn);saveF();}
   document.getElementById('pa-num').value=pan+1;
+  // 3アウトで自動的に次の回へ（3回表で3アウトなら試合終了→次のゲームへ）
+  if(isOut&&outsInInning(inn)>=3){
+    var sel=document.getElementById('inning');
+    if(sel.selectedIndex<sel.options.length-1){
+      sel.selectedIndex++;
+      flash('3アウト → '+sel.value+'へ');
+    }else{
+      sel.selectedIndex=0;document.getElementById('pa-num').value=1;
+      flash('試合終了 → 次のゲーム（1回表・打席1）へ');
+    }
+  }
   clearR();
   refreshAfterChange();
+}
+
+// 画面下に数秒だけ出るお知らせ
+function flash(m){
+  var e=document.getElementById('flash');
+  if(!e){e=document.createElement('div');e.id='flash';e.className='flash';e.setAttribute('role','status');document.body.appendChild(e);}
+  e.textContent=m;e.classList.add('show');
+  clearTimeout(flash._t);flash._t=setTimeout(function(){e.classList.remove('show');},2500);
+}
+// 今のゲームの、指定した回のアウト数（表示・回の自動送り用。成績の計算には使わない）
+function outsInInning(inn){
+  var sorted=ABS.slice().sort(function(a,b){return a.id-b.id;});
+  var start=-1;
+  for(var i=sorted.length-1;i>=0;i--){if(sorted[i].paNum===1){start=i;break;}}
+  if(start<0)return 0;
+  return sorted.slice(start).filter(function(a){return a.inning===inn&&a.isOut;}).length;
 }
 
 // 現在のゲーム状況（累計球数・走者）
@@ -326,6 +364,8 @@ function renderGameStatus(){
   var sub=after?'累計 <b>'+c+'</b>球 → 次の打席は <b>36球以後</b>（投手疲労）':'累計 <b>'+c+'</b>球 → 36球まであと <b>'+(THRESHOLD-c)+'</b>球';
   var names=['一','二','三'],on=[];r.forEach(function(x,i){if(x)on.push(names[i]);});
   var runnerTxt=on.length?(on.length===3?'満塁':on.join('・')+'塁'):'走者なし';
+  var outs=isNew?0:outsInInning($('inning').value);
+  runnerTxt=$('inning').value+' '+outs+'アウト · '+runnerTxt;
   var svg='<svg width="46" height="46" viewBox="0 0 46 46" aria-label="走者: '+runnerTxt+'">'+
     '<rect class="base'+(r[1]?' on':'')+'" x="17" y="4" width="12" height="12" transform="rotate(45 23 10)"/>'+
     '<rect class="base'+(r[2]?' on':'')+'" x="3" y="18" width="12" height="12" transform="rotate(45 9 24)"/>'+
