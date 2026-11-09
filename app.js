@@ -302,41 +302,65 @@ function clearR(){
 function changePitch(d){pitchCount=Math.max(1,Math.min(15,pitchCount+d));document.getElementById('pitch-disp').textContent=pitchCount;}
 function changeEP(d){epc=Math.max(1,Math.min(15,epc+d));document.getElementById('e-pitch-disp').textContent=epc;}
 // 球数入力（記録画面・編集画面）：よく出る球数(出現率5%超)はスライダー、まれな球数は数字入力
-var PITCH_RARE=0.05, PITCH_MAXIN=30, pitchSlideMax=5;
+var PITCH_RARE=0.05, PITCH_MAXIN=30, PITCH_SLIDE_MIN=6, pitchSlideMax=6; // スライダーは最低でも1〜6球
 var PIN={main:{range:'pitch-range',num:'pitch-num',disp:'pitch-disp',ticks:'pitch-ticks',more:'pitch-more'},
          edit:{range:'e-pitch-range',num:'e-pitch-num',disp:'e-pitch-disp',ticks:'e-pitch-ticks',more:'e-pitch-more'}};
 // スライダーの上限 = 1球から数えて、出現率が5%を超え続ける最大の球数（データが少ないうちは5）
 function calcPitchSlideMax(){
-  if(ABS.length<30)return 5;
+  if(ABS.length<30)return PITCH_SLIDE_MIN;
   var cnt={};ABS.forEach(function(a){cnt[a.pitches]=(cnt[a.pitches]||0)+1;});
   var m=0;for(var k=1;k<=PITCH_MAXIN;k++){if((cnt[k]||0)/ABS.length>PITCH_RARE)m=k;else break;}
-  return Math.max(3,Math.min(10,m));
+  return Math.max(PITCH_SLIDE_MIN,Math.min(10,m));
 }
-function showPitch(which,v){
-  var p=PIN[which],r=$(p.range),n=$(p.num);
-  $(p.disp).textContent=v;
+// つまみ位置（0〜1）を描く。snap=true のときは吸い付くアニメーション付き
+function placeP(which,raw,snap){
+  var r=$(PIN[which].range);if(!r)return;var w=r.parentNode;
+  var p=(Math.max(1,Math.min(pitchSlideMax,raw))-1)/(pitchSlideMax-1);
+  w.classList.toggle('snap',!!snap);
+  w.style.setProperty('--p',p);
+  if(snap){clearTimeout(w._t);w._t=setTimeout(function(){w.classList.remove('snap');},320);}
+}
+function showPitch(which,v,snap){
+  var p=PIN[which],r=$(p.range),n=$(p.num),d=$(p.disp);
+  if(d.textContent!==String(v)){d.textContent=v;var b=d.parentNode;b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop');}
   var big=v>pitchSlideMax;
-  if(r){r.max=pitchSlideMax;if(!big)r.value=v;r.classList.toggle('off',big);paintRange(r);}
+  if(r){r.max=pitchSlideMax;r.parentNode.classList.toggle('off',big);
+    if(!big&&snap!=='keep'){r.value=v;placeP(which,v,snap!==false);}}
+  var t=$(p.ticks);if(t)[].forEach.call(t.children,function(s,i){s.classList.toggle('cur',!big&&i+1===v);});
   if(n){n.min=pitchSlideMax+1;if(!big&&document.activeElement!==n)n.value='';else if(big&&+n.value!==v&&document.activeElement!==n)n.value=v;n.parentNode.classList.toggle('on',big);}
 }
-function clampP(v){return Math.max(1,Math.min(PITCH_MAXIN,parseInt(v)||1));}
-function setPitch(v){pitchCount=clampP(v);var n=$('pitch-num');if(n&&pitchCount<=pitchSlideMax)n.value='';showPitch('main',pitchCount);}
-function setEP(v){epc=clampP(v);var n=$('e-pitch-num');if(n&&epc<=pitchSlideMax)n.value='';showPitch('edit',epc);}
+function clampP(v){return Math.max(1,Math.min(PITCH_MAXIN,Math.round(+v)||1));}
+function setVal(which,v){if(which==='main')pitchCount=v;else epc=v;}
+function getVal(which){return which==='main'?pitchCount:epc;}
+// 指で動かしている間：つまみは指に連続でついていき、表示は最寄りの整数
+function slideP(which,raw){
+  var v=clampP(raw);setVal(which,v);
+  var n=$(PIN[which].num);if(n)n.value='';
+  placeP(which,+raw,false);showPitch(which,v,'keep');
+}
+// 指を離したら最寄りの整数へ吸い付く
+function snapP(which){var v=clampP($(PIN[which].range).value);setVal(which,v);showPitch(which,v,true);}
+function setPitch(v){pitchCount=clampP(v);var n=$('pitch-num');if(n&&pitchCount<=pitchSlideMax)n.value='';showPitch('main',pitchCount,true);}
+function setEP(v){epc=clampP(v);var n=$('e-pitch-num');if(n&&epc<=pitchSlideMax)n.value='';showPitch('edit',epc,true);}
 function numPitch(which,val){
   var r=$(PIN[which].range);
-  var v=val===''?(+r.value):clampP(val);
-  if(which==='main')pitchCount=v;else epc=v;
-  showPitch(which,v);
+  var v=val===''?clampP(r.value):clampP(val);
+  setVal(which,v);showPitch(which,v,true);
 }
-function paintRange(r){if(r)r.style.setProperty('--p',((r.value-r.min)/(r.max-r.min)*100)+'%');}
+function paintRange(r){}
 function updatePitchSlider(){
   pitchSlideMax=calcPitchSlideMax();
   ['main','edit'].forEach(function(w){
     var p=PIN[w],t=$(p.ticks),m=$(p.more);
-    if(t){var h='';for(var i=1;i<=pitchSlideMax;i++)h+='<span style="--k:'+((i-1)/(pitchSlideMax-1))+'">'+i+'</span>';t.innerHTML=h;}
+    if(t&&t.children.length!==pitchSlideMax){var h='';for(var i=1;i<=pitchSlideMax;i++)h+='<span style="--k:'+((i-1)/(pitchSlideMax-1))+'">'+i+'</span>';t.innerHTML=h;}
+    var r=$(p.range);
+    if(r&&!r._bound){r._bound=1;
+      var on=function(){r.parentNode.classList.add('drag');},off=function(){r.parentNode.classList.remove('drag');snapP(w);};
+      r.addEventListener('pointerdown',on);r.addEventListener('touchstart',on,{passive:true});
+      r.addEventListener('pointerup',off);r.addEventListener('pointercancel',off);r.addEventListener('touchend',off);r.addEventListener('blur',function(){r.parentNode.classList.remove('drag');});}
     if(m)m.textContent=(pitchSlideMax+1)+'球〜';
   });
-  showPitch('main',pitchCount);showPitch('edit',epc);
+  showPitch('main',pitchCount,false);showPitch('edit',epc,false);
 }
 
 function addAB(){
