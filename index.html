@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#11121a" media="(prefers-color-scheme: dark)">
 <title>Wii Sports 打撃フォーム分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚾%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=5"></head><body>
+<link rel="stylesheet" href="style.css?v=6"></head><body>
 
 <header class="hdr">
   <div class="wrap hdr-top">
@@ -82,13 +82,11 @@
         <button type="button" class="pb out" onclick="selR(this,'三振',true)">三振</button>
       </div>
     </div>
-    <div class="pitch-row">
-      <div><div class="stitle">球数</div><div class="hint">投手に投げさせた球数</div></div>
-      <div class="pitch-counter">
-        <button type="button" class="pc-btn" onclick="changePitch(-1)" aria-label="球数を減らす">−</button>
-        <div class="pc-num" id="pitch-disp">3</div>
-        <button type="button" class="pc-btn" onclick="changePitch(1)" aria-label="球数を増やす">＋</button>
-      </div>
+    <div class="pitch-slide">
+      <div class="pitch-head"><div><div class="stitle">球数</div><div class="hint">投手に投げさせた球数（左右にスライド）</div></div>
+        <div class="pc-big"><span id="pitch-disp">3</span><small>球</small></div></div>
+      <input type="range" id="pitch-range" class="prange" min="1" max="15" step="1" value="3" oninput="setPitch(this.value)" aria-label="球数">
+      <div class="pticks" aria-hidden="true"><span>1</span><span>5</span><span>10</span><span>15</span></div>
     </div>
     <div class="actions">
       <button type="button" class="btn btnp btn-rec" onclick="addAB()">打席を記録する</button>
@@ -220,10 +218,9 @@
       </select>
     </div>
     <div class="mrow"><label>球数</label>
-      <div class="pitch-counter">
-        <button type="button" class="pc-btn" onclick="changeEP(-1)">−</button>
-        <div class="pc-num" id="e-pitch-disp">3</div>
-        <button type="button" class="pc-btn" onclick="changeEP(1)">＋</button>
+      <div class="pitch-slide in-modal">
+        <div class="pc-big"><span id="e-pitch-disp">3</span><small>球</small></div>
+        <input type="range" id="e-pitch-range" class="prange" min="1" max="15" step="1" value="3" oninput="setEP(this.value)" aria-label="球数">
       </div>
     </div>
     <div class="mrow"><label>通算打席番号</label><input type="number" id="e-panum" min="1" max="30"/></div>
@@ -236,6 +233,6 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="app.js?v=5"></script>
-<script src="sync.js?v=5"></script>
+<script src="app.js?v=6"></script>
+<script src="sync.js?v=6"></script>
 </body></html>

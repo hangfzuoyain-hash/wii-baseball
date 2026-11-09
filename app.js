@@ -297,10 +297,14 @@ function clearR(){
   rB=1;pitchCount=3;
   resetResultBtns();
   setBN(1);
-  document.getElementById('pitch-disp').textContent='3';
+  setPitch(3);
 }
 function changePitch(d){pitchCount=Math.max(1,Math.min(15,pitchCount+d));document.getElementById('pitch-disp').textContent=pitchCount;}
 function changeEP(d){epc=Math.max(1,Math.min(15,epc+d));document.getElementById('e-pitch-disp').textContent=epc;}
+// 球数スライダー（記録画面・編集画面）
+function setPitch(v){pitchCount=Math.max(1,Math.min(15,parseInt(v)||1));document.getElementById('pitch-disp').textContent=pitchCount;var r=document.getElementById('pitch-range');if(r&&+r.value!==pitchCount)r.value=pitchCount;paintRange(r);}
+function setEP(v){epc=Math.max(1,Math.min(15,parseInt(v)||1));document.getElementById('e-pitch-disp').textContent=epc;var r=document.getElementById('e-pitch-range');if(r&&+r.value!==epc)r.value=epc;paintRange(r);}
+function paintRange(r){if(r)r.style.setProperty('--p',((r.value-r.min)/(r.max-r.min)*100)+'%');}
 
 function addAB(){
   var fn=document.getElementById('form-name').value.trim()||'（未設定）';
@@ -818,7 +822,7 @@ window.WII_EDIT=function(id){
   var res=document.getElementById('e-result');
   for(var i=0;i<res.options.length;i++){if(res.options[i].value===a.result)res.selectedIndex=i;}
   document.getElementById('e-bases').value=String(a.bases||0);
-  epc=a.pitches||3;document.getElementById('e-pitch-disp').textContent=epc;
+  setEP(a.pitches||3);
   document.getElementById('e-panum').value=a.paNum||1;
   document.getElementById('edit-modal').style.display='flex';
 };
