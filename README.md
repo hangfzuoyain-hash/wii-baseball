@@ -14,7 +14,7 @@
 
 ## コードを更新して公開し直す
 ```bash
-cd ~/Desktop/wii-baseball
+cd ~/Desktop/個人的フォルダ/wii-baseball
 git add -A
 git commit -m "変更内容のメモ"
 git push
